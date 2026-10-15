@@ -321,7 +321,7 @@ function serveStatic(req, res, pathname) {
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, "index.html");
   const ext = path.extname(file).toLowerCase();
-  res.writeHead(200, { "Content-Type": TYPES[ext] || "application/octet-stream", "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600", "X-Content-Type-Options": "nosniff" });
+  res.writeHead(200, { "Content-Type": TYPES[ext] || "application/octet-stream", "Cache-Control": [".html", ".js", ".css"].includes(ext) ? "no-cache" : "public, max-age=3600", "X-Content-Type-Options": "nosniff" });
   fs.createReadStream(file).pipe(res);
 }
 
