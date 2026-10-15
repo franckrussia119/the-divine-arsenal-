@@ -57,6 +57,15 @@
         return db.users.filter(u => me.role === "superadmin" || u.mentor_id === me.id || u.role !== "student").map(pub);
       },
       async getUser(id) { need(me && (id === me.id || isStaffFor(id) || me.role !== "student")); return pub(db.users.find(u => u.id === id)); },
+      async createUser(o) {
+        need(me && me.role === "superadmin"); const username = (o.username || "").trim().toLowerCase();
+        if (!o.full_name) throw new Error("Nom complet requis");
+        if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new Error("Identifiant : 3 à 30 caractères (lettres sans accents, chiffres, . _ -)");
+        if ((o.password || "").length < 6) throw new Error("Mot de passe : 6 caractères minimum");
+        if (db.users.some(u => u.username === username)) throw new Error("Cet identifiant est déjà pris");
+        const u = { id: uid(), username, password: o.password, full_name: o.full_name, role: o.role || "student", class_id: o.class_id || null, mentor_id: o.role === "student" ? o.mentor_id || null : null, active: true, created_at: now() };
+        db.users.push(u); save(); return pub(u);
+      },
       async updateUser(id, patch) {
         const u = db.users.find(x => x.id === id); need(u);
         need(me.role === "superadmin" || (isStaffFor(id) && !("role" in patch) && !("active" in patch) && !("mentor_id" in patch)) || (id === me.id && Object.keys(patch).every(k => k === "full_name")));
@@ -127,6 +136,7 @@
       async changeMyPassword(pw) { await call("POST", "/api/me/password", { password: pw }); },
       async listUsers() { return call("GET", "/api/users"); },
       async getUser(id) { return call("GET", "/api/users/" + id); },
+      async createUser(o) { return call("POST", "/api/users", o); },
       async updateUser(id, patch) { const u = await call("PATCH", "/api/users/" + id, patch); if (me && u && u.id === me.id) me = u; return u; },
       async setPassword(id, pw) { await call("POST", "/api/users/" + id + "/password", { password: pw }); },
       async deleteUser(id) { await call("DELETE", "/api/users/" + id); },

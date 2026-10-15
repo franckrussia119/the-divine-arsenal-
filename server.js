@@ -180,6 +180,21 @@ route("GET", "/api/users", ({ me }) => {
   return all(`SELECT * FROM users WHERE role IN ('admin','superadmin') OR mentor_id = ? OR class_id IN (SELECT id FROM classes WHERE mentor_id = ?) OR id = ?
               ORDER BY full_name COLLATE NOCASE`, me.id, me.id, me.id).map(pubUser);
 });
+route("POST", "/api/users", ({ me, body }) => {
+  if (!isSuper(me)) fail(403, "Seul le superadmin peut créer des comptes");
+  const username = String(body.username || "").trim().toLowerCase(), password = String(body.password || ""), full_name = String(body.full_name || "").trim().slice(0, 120);
+  const role = ["student", "admin", "superadmin"].includes(body.role) ? body.role : "student";
+  if (!full_name) fail(400, "Nom complet requis");
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) fail(400, "Identifiant : 3 à 30 caractères (lettres sans accents, chiffres, . _ -)");
+  if (password.length < 6) fail(400, "Mot de passe : 6 caractères minimum");
+  if (one("SELECT id FROM users WHERE username = ?", username)) fail(409, "Cet identifiant est déjà pris");
+  const class_id = body.class_id || null, mentor_id = role === "student" ? (body.mentor_id || null) : null;
+  if (class_id && !one("SELECT id FROM classes WHERE id = ?", class_id)) fail(400, "Classe introuvable");
+  if (mentor_id && !one("SELECT id FROM users WHERE id = ? AND role IN ('admin','superadmin')", mentor_id)) fail(400, "Mentor introuvable");
+  const id = uid();
+  run("INSERT INTO users (id, username, pw, full_name, role, class_id, mentor_id, active, created_at) VALUES (?,?,?,?,?,?,?,1,?)", id, username, hashPw(password), full_name, role, class_id, mentor_id, now());
+  return pubUser(one("SELECT * FROM users WHERE id = ?", id));
+});
 route("GET", "/api/users/:id", ({ me, p }) => {
   const u = one("SELECT * FROM users WHERE id = ?", p.id); if (!u) return null;
   if (!(canSee(me, u.id) || (isStaff(me) && u.role !== "student"))) fail(403, "Non autorisé");

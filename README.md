@@ -55,12 +55,16 @@ Activez **Auto Deploy** pour que chaque `git push` mette le site à jour.
 
 ## Premier démarrage
 1. Connectez-vous avec `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD`.
-2. **Administration → Classes → Nouvelle classe** : nom + code d'inscription.
-3. **Mentors** : ils créent leur compte avec le code d'une classe ; dans **Administration → Élèves et mentors**,
-   passez leur rôle à **Mentor**, puis choisissez-les comme mentor de la classe (**Classes → Modifier**).
-4. **Élèves** : ils créent leur compte avec le code de leur classe et sont rattachés au mentor de la classe.
-   Vous pouvez attribuer chaque élève à un autre mentor (colonne *Mentor*).
-5. Le mentor **débloque les leçons** dans son *Tableau de bord* (classe entière) ou dans la fiche d'un élève.
+2. **Leçons** (menu du haut) : les 36 leçons sont là. Ouvrez-en une pour voir le résumé du cours,
+   le cahier d'exercices complet et le test, tels que les élèves les verront.
+3. **Administration → Classes → Nouvelle classe** (nom + code).
+4. **Administration → Utilisateurs → Créer un utilisateur** : nom, identifiant, mot de passe, rôle
+   (Élève, Mentor ou Superadmin), classe et mentor. Un récapitulatif à communiquer à la personne s'affiche.
+   (Les élèves peuvent aussi créer leur compte eux-mêmes avec le code de leur classe.)
+5. **Administration → Déblocage des leçons** : choisissez une classe (ou un seul élève), puis débloquez
+   les leçons une par une ou toute une phase d'un clic. Les élèves les voient aussitôt et peuvent faire
+   les exercices.
+6. Les mentors peuvent aussi débloquer les leçons de leur classe depuis leur *Tableau de bord*.
 
 ## Qui fait quoi
 - **Élève** : résumé du cours (PDF / Word), cahier en ligne avec enregistrement automatique, questions au mentor
