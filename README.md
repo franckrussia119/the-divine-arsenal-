@@ -66,6 +66,16 @@ Activez **Auto Deploy** pour que chaque `git push` mette le site à jour.
    les exercices.
 6. Les mentors peuvent aussi débloquer les leçons de leur classe depuis leur *Tableau de bord*.
 
+## Application sur téléphone (PWA)
+Le site est une **application installable** : icône sur l'écran d'accueil, ouverture en plein écran, barre d'onglets en bas
+comme WhatsApp, conversations avec le mentor façon messagerie, fenêtres qui s'ouvrent par le bas.
+Il faut que le site soit en **HTTPS** (Coolify le fait automatiquement avec votre domaine).
+
+- **Android (Chrome)** : ouvrir le site → bouton **Installer** sur l'accueil, ou menu ⋮ → *Installer l'application*.
+- **iPhone (Safari)** : ouvrir le site → bouton **Partager** ↑ → *Sur l'écran d'accueil* → *Ajouter*.
+
+Les mises à jour arrivent toutes seules : après un redéploiement, l'application charge la nouvelle version.
+
 ## Qui fait quoi
 - **Élève** : résumé du cours (PDF / Word), cahier en ligne avec enregistrement automatique, questions au mentor
   sur une question précise, test final (réussi à 7/10, essais illimités), corrections et validation.

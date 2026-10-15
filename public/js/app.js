@@ -37,6 +37,9 @@
     dl: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
   };
   IC.book = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM20 19v3H6"/></svg>';
+  IC.back = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  IC.send = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6 3 10l12 2-12 2z"/></svg>';
+  IC.chev = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
   const ic = (n) => h("span", { html: IC[n], style: "display:inline-flex" });
   const toast = (t) => { const el = h("div", { class: "toast" }, t); document.body.append(el); setTimeout(() => el.remove(), 2600); };
   const fmt = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
@@ -52,8 +55,10 @@
   function modal(title, body, actions) {
     const m = h("div", { class: "modal" });
     m.addEventListener("click", (e) => { if (e.target === m) m.remove(); });
-    m.append(h("div", { class: "card" }, h("h2", null, title), body, h("div", { class: "row", style: "margin-top:18px;justify-content:flex-end" }, actions(m))));
-    document.body.append(m); return m;
+    const close = m.remove.bind(m);
+    m.remove = () => { document.body.classList.remove("noscroll"); close(); };
+    m.append(h("div", { class: "card sheet" }, h("div", { class: "grab" }), h("h2", null, title), h("div", { class: "sbody" }, body), h("div", { class: "row actions" }, actions(m))));
+    document.body.append(m); document.body.classList.add("noscroll"); return m;
   }
 
   // ---------- données : déblocages et progression ----------
@@ -68,17 +73,23 @@
   const bestQuiz = (arr, sid, n) => arr.filter(q => q.student_id === sid && q.lesson === n).reduce((b, q) => !b || q.score / q.total > b.score / b.total ? q : b, null);
 
   // ---------- barre du haut ----------
+  const logout = async () => { if (!confirm("Se déconnecter ?")) return; await API.signOut(); S.me = null; go("#/"); route(); };
   function topbar(active, unread) {
     const nav = [];
-    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours"], ["#/questions", "chat", "Mes questions"]);
-    else { nav.push(["#/mentor", "grid", "Tableau de bord"], ["#/lecons", "book", "Leçons"], ["#/inbox", "chat", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration"]); }
-    nav.push(["#/profil", "user", "Profil"]);
+    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours", "Parcours"], ["#/questions", "chat", "Mes questions", "Questions"]);
+    else { nav.push(["#/mentor", "grid", "Tableau de bord", "Accueil"], ["#/lecons", "book", "Leçons", "Leçons"], ["#/inbox", "chat", "Questions", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration", "Admin"]); }
+    nav.push(["#/profil", "user", "Profil", "Profil"]);
+    const deep = S.deep; // écran secondaire : flèche retour (téléphone)
     return [
-      API.mode === "demo" ? h("div", { class: "demo" }, "Mode démonstration : les données restent dans ce navigateur (le serveur de l'école n'est pas utilisé).") : null,
-      h("div", { class: "top" }, h("div", { class: "wrap" },
-        h("a", { class: "brand", href: "#/" }, h("img", { src: "img/logo.png", alt: "" }), h("div", null, h("b", null, "The Divine Arsenal Corporation"), h("small", null, "ÉCOLE DE DISCIPLES"))),
+      API.mode === "demo" ? h("div", { class: "demo" }, "Mode démonstration : les données restent dans ce navigateur.") : null,
+      h("header", { class: "top" + (deep ? " deep" : "") }, h("div", { class: "wrap" },
+        deep ? h("a", { class: "backbtn mobile", href: deep.back, "aria-label": "Retour" }, ic("back")) : null,
+        h("a", { class: "brand" + (deep ? " desk" : ""), href: "#/" }, h("img", { src: "img/logo.png", alt: "" }), h("div", null, h("b", null, "The Divine Arsenal Corporation"), h("small", null, "ÉCOLE DE DISCIPLES"))),
+        deep ? h("div", { class: "toptitle mobile" }, h("b", null, deep.title), deep.sub ? h("small", null, deep.sub) : null) : null,
         h("nav", { class: "nav" }, nav.map(([href, i, t]) => h("a", { href, class: active === href ? "on" : null, title: t }, ic(i), h("span", { class: "navlabel" }, t), (i === "chat" && unread) ? h("i", { class: "dot" }) : null)),
-          h("button", { title: "Déconnexion", onclick: async () => { await API.signOut(); S.me = null; go("#/"); route(); } }, ic("out"))))) ];
+          h("button", { title: "Déconnexion", onclick: logout }, ic("out"))),
+        !deep ? h("button", { class: "iconbtn mobile", title: "Déconnexion", "aria-label": "Déconnexion", onclick: logout }, ic("out")) : null)),
+      deep ? null : h("nav", { class: "tabbar" }, nav.map(([href, i, t, short]) => h("a", { href, class: active === href ? "on" : null }, h("span", { class: "ti" }, ic(i), (i === "chat" && unread) ? h("i", { class: "badge" }, unread > 9 ? "9+" : unread) : null), h("span", { class: "tl" }, short)))) ];
   }
   async function unreadCount() {
     try {
@@ -90,7 +101,43 @@
     const all = await API.listUsers();
     return all.filter(u => u.role === "student" && (S.me.role === "superadmin" || u.mentor_id === S.me.id));
   }
-  function shell(active, unread, ...content) { fill(app, ...topbar(active, unread), ...content); scrollTo(0, 0); }
+  function shell(active, unread, ...content) {
+    const deep = !!S.deep;
+    document.body.classList.toggle("is-deep", deep);
+    fill(app, ...topbar(active, unread), h("main", { class: "screen" }, ...content));
+    S.deep = null; scrollTo(0, 0);
+  }
+  // tableaux : chaque cellule reçoit l'intitulé de sa colonne (affichage en fiches sur téléphone)
+  function labelize(t) {
+    const heads = [...t.querySelectorAll("tr:first-child th")].map(x => x.textContent);
+    t.classList.add("rt");
+    t.querySelectorAll("tr").forEach((tr, i) => { if (!i && tr.querySelector("th")) { tr.classList.add("hd"); return; } [...tr.children].forEach((td, k) => { if (heads[k]) td.dataset.label = heads[k]; }); });
+    return t;
+  }
+  // ---------- installation de l'application (PWA) ----------
+  let installEvt = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; document.querySelectorAll(".installcard").forEach(x => x.classList.remove("hide")); });
+  addEventListener("appinstalled", () => { installEvt = null; document.querySelectorAll(".installcard").forEach(x => x.remove()); toast("Application installée ✓"); });
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  async function doInstall() {
+    if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; installEvt = null; if (r.outcome === "accepted") document.querySelectorAll(".installcard").forEach(x => x.remove()); return; }
+    modal("Installer l'application", h("div", { class: "steps" }, isIOS()
+      ? [h("p", null, "Sur iPhone / iPad, avec ", h("b", null, "Safari"), " :"), h("ol", null, h("li", null, "Touchez le bouton ", h("b", null, "Partager"), " (le carré avec une flèche ↑) en bas de l'écran."), h("li", null, "Faites défiler et touchez ", h("b", null, "« Sur l'écran d'accueil »"), "."), h("li", null, "Touchez ", h("b", null, "Ajouter"), " : l'icône apparaît sur votre téléphone."))]
+      : [h("p", null, "Sur Android, avec ", h("b", null, "Chrome"), " :"), h("ol", null, h("li", null, "Touchez le menu ", h("b", null, "⋮"), " en haut à droite."), h("li", null, "Touchez ", h("b", null, "« Installer l'application »"), " ou ", h("b", null, "« Ajouter à l'écran d'accueil »"), "."), h("li", null, "Confirmez : l'icône apparaît avec vos autres applications."))]),
+      (m) => [h("button", { class: "btn", onclick: () => m.remove() }, "J'ai compris")]);
+  }
+  function installCard() {
+    if (standalone()) return null;
+    let dismissed = false; try { dismissed = localStorage.getItem("dac-install-x") === "1"; } catch (e) { }
+    if (dismissed) return null;
+    const c = h("div", { class: "installcard" + (installEvt || isIOS() || matchMedia("(max-width:820px)").matches ? "" : " hide") },
+      h("img", { src: "img/icon-192.png", alt: "" }),
+      h("div", { class: "ic-t" }, h("b", null, "Installe l'application"), h("span", null, "Sur ton écran d'accueil, comme WhatsApp.")),
+      h("button", { class: "btn gold sm", onclick: doInstall }, "Installer"),
+      h("button", { class: "x", "aria-label": "Fermer", onclick: () => { try { localStorage.setItem("dac-install-x", "1"); } catch (e) { } c.remove(); } }, "×"));
+    return c;
+  }
 
   // =============================== CONNEXION ===============================
   function viewLogin() {
@@ -111,13 +158,14 @@
       catch (x) { err.textContent = x.message; err.classList.remove("hide"); } finally { btn.disabled = false; } } },
       h("label", { class: "f" }, "Identifiant"), f.u, h("label", { class: "f" }, "Mot de passe"), f.p, signupOnly, btn, err);
     fill(app, h("div", { class: "login" },
-      h("div", { class: "hero" }, h("div", { class: "k", style: "color:var(--gold2);font-weight:800;letter-spacing:3px;font-size:13px" }, "THE DIVINE ARSENAL CORPORATION"),
+      h("div", { class: "hero" }, h("img", { class: "herologo", src: "img/logo.png", alt: "The Divine Arsenal Corporation" }), h("div", { class: "k", style: "color:var(--gold2);font-weight:800;letter-spacing:3px;font-size:13px" }, "THE DIVINE ARSENAL CORPORATION"),
         h("h1", null, "Ton cahier de disciple, ", h("span", { class: "gold" }, "toujours avec toi.")),
         h("p", null, "Relis tes résumés de cours, remplis ton cahier en ligne, pose tes questions à ton mentor et teste-toi à la fin de chaque leçon."),
         h("div", { class: "v" }, "« Croissez dans la grâce et dans la connaissance de notre seigneur et sauveur Jésus Christ. » — 2 Pierre 3.18")),
       h("div", { class: "panel" }, h("div", { class: "card", style: "box-shadow:none;background:transparent" },
         h("img", { class: "logo", src: "img/logo.png", alt: "The Divine Arsenal Corporation" }), tabs, form,
-        API.mode === "demo" ? h("div", { class: "note", style: "margin-top:16px" }, h("b", null, "Comptes de démonstration : "), "etudiant / etudiant123 · mentor / mentor123 · admin / admin123 · code de classe : DEMO2026") : null))));
+        API.mode === "demo" ? h("div", { class: "note", style: "margin-top:16px" }, h("b", null, "Comptes de démonstration : "), "etudiant / etudiant123 · mentor / mentor123 · admin / admin123 · code de classe : DEMO2026") : null,
+        h("div", { style: "margin-top:16px" }, installCard())))));
   }
 
   // =============================== ÉLÈVE : ACCUEIL ===============================
@@ -130,9 +178,9 @@
     const current = LESSONS.find(l => ["op", "ip"].includes(st[l.n])) || LESSONS.find(l => st[l.n] !== "lk");
     const C = 2 * Math.PI * 52;
     const passes = LESSONS.filter(l => { const b = bestQuiz(quiz, S.me.id, l.n); return b && b.score / b.total >= PASS; }).length;
-    shell("#/", unread, h("div", { class: "wrap page" },
+    shell("#/", unread, h("div", { class: "wrap page" }, installCard(),
       h("div", { class: "welcome" },
-        h("div", { class: "ring", html: `<svg width="120" height="120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.15)" stroke-width="12" fill="none"/><circle cx="60" cy="60" r="52" stroke="#C9A227" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg><b>${pct}%<small>CAHIERS ENVOYÉS</small></b>` }),
+        h("div", { class: "ring", html: `<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.15)" stroke-width="12" fill="none"/><circle cx="60" cy="60" r="52" stroke="#C9A227" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg><b>${pct}%<small>CAHIERS ENVOYÉS</small></b>` }),
         h("div", null, h("div", { class: "k" }, "BIENVENUE"), h("h1", null, "Shalom, " + (S.me.full_name || S.me.username).split(" ")[0] + " !"),
           current ? [h("p", null, "Ta leçon du moment : ", h("b", { style: "color:#fff" }, current.n + " · " + current.t)), h("a", { class: "btn gold", style: "margin-top:14px", href: "#/lecon/" + current.n }, "Continuer ma leçon →")] : h("p", null, "Ton mentor va bientôt débloquer ta première leçon. Reste connecté !"))),
       h("div", { class: "stats" },
@@ -166,12 +214,15 @@
       : [["support", "📖 Résumé du cours"], ["cahier", "✍️ Mon cahier"], ["test", "🏆 Test final"], ["questions", "💬 Mes questions"]];
     const unreadL = lm.filter(m => review ? !m.read_by_staff : !m.read_by_student).length;
     tab = tab || (review ? "cahier" : "support");
+    const backHref = review ? "#/eleve/" + sid : preview ? "#/lecons" : "#/";
     const head = h("div", { class: "lhead p" + l.ph }, h("div", { class: "wrap" },
-      h("a", { class: "back", href: review ? "#/eleve/" + sid : preview ? "#/lecons" : "#/" }, "← " + (review ? (student.full_name || student.username) : preview ? "Toutes les leçons" : "Mon parcours")),
-      h("div", { class: "k", style: "margin-top:10px" }, "LEÇON " + l.n + " · " + l.etape.toUpperCase()), h("h1", null, l.t), h("div", { class: "fil" }, l.fil),
-      h("div", { class: "ltabs" }, tabs.map(([k, t]) => h("a", { href: base + "/" + k, class: tab === k ? "on" : null }, t, (k === "questions" || (review && k === "cahier")) && unreadL ? h("span", { class: "c" }, unreadL) : null)))));
-    const body = h("div", { class: "wrap page", style: "padding-top:10px" });
-    shell(review ? "#/mentor" : preview ? "#/lecons" : "#/", unread, head, body);
+      h("a", { class: "back desk", href: backHref }, "← " + (review ? (student.full_name || student.username) : preview ? "Toutes les leçons" : "Mon parcours")),
+      h("div", { class: "k" }, "LEÇON " + l.n + " · " + l.etape.toUpperCase()), h("h1", null, l.t), h("div", { class: "fil" }, l.fil)));
+    const short = { support: "Résumé", cahier: review ? "Cahier" : "Cahier", test: "Test", questions: "Questions" };
+    const tabsBar = h("div", { class: "ltabs" }, h("div", { class: "wrap" }, tabs.map(([k, t]) => h("a", { href: base + "/" + k, class: tab === k ? "on" : null, onclick: (e) => { e.preventDefault(); location.replace(base + "/" + k); } }, h("span", { class: "lt-long" }, t), h("span", { class: "lt-short" }, short[k]), (k === "questions" || (review && k === "cahier")) && unreadL ? h("span", { class: "c" }, unreadL) : null))));
+    const body = h("div", { class: "wrap page lpage" });
+    S.deep = { back: backHref, title: "Leçon " + l.n + " · " + l.t, sub: review ? (student.full_name || student.username) : preview ? "Aperçu" : null };
+    shell(review ? "#/mentor" : preview ? "#/lecons" : "#/", unread, head, tabsBar, body);
     if (tab === "support") renderSupport(body, l);
     else if (tab === "cahier") renderCahier(body, l, student, ans, rev, lm, review, preview);
     else if (tab === "test") renderTest(body, l, student, quiz.filter(q => q.lesson === n), review, preview);
@@ -188,9 +239,9 @@
     else if (s.schema.type === "pyramid") schema = h("div", null, s.schema.items.map((i, k) => h("div", { style: `margin:6px auto;width:${45 + 55 * k / (s.schema.items.length - 1)}%;background:${k % 2 ? "var(--pur2)" : "var(--pur)"};color:#fff;border-radius:12px;padding:10px 14px;text-align:center` }, h("b", { style: "color:var(--gold2)" }, "Niveau " + i[0] + " · "), i[1], i[2] ? h("div", { style: "font-size:13px;color:#E4DAF2" }, i[2]) : null)));
     else schema = tableOf(s.schema);
     add(el, 
-      h("div", { class: "row noprint", style: "justify-content:flex-end;margin-top:14px" },
-        h("button", { class: "btn ghost sm", onclick: () => print() }, ic("dl"), "Télécharger ce résumé (PDF)"),
-        h("a", { class: "btn ghost sm", href: "files/Mon-support-de-cours-Phase-" + l.ph + ".docx", download: true }, ic("dl"), "Support complet (Word)")),
+      h("div", { class: "row noprint dlrow", style: "justify-content:flex-end;margin-top:14px" },
+        h("button", { class: "btn ghost sm", onclick: () => print() }, ic("dl"), "Résumé (PDF)"),
+        h("a", { class: "btn ghost sm", href: "files/Mon-support-de-cours-Phase-" + l.ph + ".docx", download: true }, ic("dl"), "Support (Word)")),
       sec("★", "L'idée clé"), h("div", { class: "idea" }, s.phrase),
       sec("✦", "Ce que tu vas découvrir"), h("div", { class: "card" }, s.dec.map(d => h("div", { style: "margin:4px 0" }, h("b", { style: "color:var(--gold)" }, "✦ "), d))),
       sec("1", "L'essentiel"), s.pts.map((p, k) => h("div", { class: "pt" }, h("div", { class: "nb" }, k + 1), h("div", null, h("h3", null, p[0]), h("p", null, p[1]), p[2] ? h("div", { class: "rd" }, "📖 À lire : " + p[2]) : null))),
@@ -203,7 +254,7 @@
       h("p", { class: "muted", style: "font-size:12px;margin-top:20px" }, "Les encadrés « Le Royaume » résument l'enseignement du Dr Myles Munroe (résumés, non des citations). Versets : version Darby."),
       h("div", { class: "row noprint", style: "margin-top:20px" }, h("a", { class: "btn gold", href: "#/lecon/" + l.n + "/cahier" }, "J'ai lu, je remplis mon cahier →")));
   }
-  function tableOf(t) { return h("table", { class: "t" }, h("tr", null, t.head.map(c => h("th", null, c))), t.rows.map(r => h("tr", null, r.map((c, i) => h("td", { style: i ? null : "font-weight:700;color:var(--pur)" }, c))))); }
+  function tableOf(t) { return labelize(h("table", { class: "t" }, h("tr", null, t.head.map(c => h("th", null, c))), t.rows.map(r => h("tr", null, r.map((c, i) => h("td", { style: i ? null : "font-weight:700;color:var(--pur)" }, c)))))); }
 
   // ---------- cahier ----------
   function renderCahier(el, l, student, ans, rev, msgs, review, preview) {
@@ -266,7 +317,7 @@
       let input;
       if (e.type === "table") {
         const rows = (data[e.k] = Array.isArray(data[e.k]) ? data[e.k] : []);
-        input = h("div", { class: "scroll" }, h("table", { class: "tbl" }, h("tr", null, e.cols.map(c => h("th", null, c))), Array.from({ length: e.rows }, (_, r) => h("tr", null, e.cols.map((_, c) => { const inp = h("input", { disabled: ro }); inp.value = (rows[r] || [])[c] || ""; inp.oninput = () => { rows[r] = rows[r] || []; rows[r][c] = inp.value; changed(); }; return h("td", null, inp); })))));
+        input = h("div", { class: "scroll" }, h("table", { class: "tbl" }, h("tr", { class: "hd" }, e.cols.map(c => h("th", null, c))), Array.from({ length: e.rows }, (_, r) => h("tr", null, e.cols.map((_, c) => { const inp = h("input", { disabled: ro }); inp.value = (rows[r] || [])[c] || ""; inp.oninput = () => { rows[r] = rows[r] || []; rows[r][c] = inp.value; changed(); }; return h("td", { "data-label": e.cols[c] }, inp); })))));
       } else input = [e.hint ? h("div", { class: "muted", style: "font-size:13px;margin-bottom:6px" }, e.hint) : null, text(e.k, e.rows)];
       add(el, item(e.k, (i + 1) + ".", e.q, input));
     });
@@ -276,8 +327,8 @@
     const streakEl = h("b");
     const streak = () => { let best = 0, cur = 0; for (let d = 0; d < 7; d++) { const any = l.wb.d.some((_, t) => D[t + "-" + d]); cur = any ? cur + 1 : 0; best = Math.max(best, cur); } streakEl.textContent = best + " jour" + (best > 1 ? "s" : "") + " d'affilée"; };
     add(el, sec("D", "Mon défi de la semaine", "Une case par jour : ne casse pas la chaîne !"),
-      h("div", { class: "item", id: "it-D" }, h("div", { class: "scroll" }, h("table", { class: "week" }, h("tr", null, h("th", null, "Mon défi"), days.map(d => h("th", null, d))),
-        l.wb.d.map((t, ti) => h("tr", null, h("td", { class: "t" }, t), days.map((_, di) => { const b = h("button", { type: "button", class: "tick" + (D[ti + "-" + di] ? " on" : ""), disabled: ro }, "✓"); b.onclick = () => { D[ti + "-" + di] = !D[ti + "-" + di]; b.classList.toggle("on"); streak(); changed(); }; return h("td", { class: "c" }, b); }))))),
+      h("div", { class: "item", id: "it-D" }, h("div", { class: "scroll" }, h("table", { class: "week" }, h("tr", { class: "hd" }, h("th", null, "Mon défi"), days.map(d => h("th", null, d))),
+        l.wb.d.map((t, ti) => h("tr", null, h("td", { class: "t" }, t), days.map((_, di) => { const b = h("button", { type: "button", class: "tick" + (D[ti + "-" + di] ? " on" : ""), disabled: ro }, "✓"); b.onclick = () => { D[ti + "-" + di] = !D[ti + "-" + di]; b.classList.toggle("on"); streak(); changed(); }; return h("td", { class: "c", "data-d": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"][di] }, b); }))))),
         h("div", { style: "margin-top:8px" }, "🔥 Ma meilleure série : ", streakEl), itemFoot("D", "Mon défi de la semaine")));
     streak();
     // E
@@ -304,7 +355,7 @@
         h("div", { class: "row" }, h("button", { class: "btn ghost", style: "color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)", onclick: async () => { await API.saveReview(student.id, l.n, { items: reviewState, general: gen.value }); toast("Appréciation enregistrée"); } }, "Enregistrer"),
           h("button", { class: "btn gold", onclick: async () => { await API.saveReview(student.id, l.n, { items: reviewState, general: gen.value, validated: !valid }); toast(valid ? "Validation retirée" : "Leçon validée ⭐"); if (!valid) confetti(); route(); } }, valid ? "Retirer la validation" : "⭐ Valider la leçon"))));
       // lu par le mentor
-      API.markRead(msgs.filter(m => !m.read_by_staff).map(m => m.id), true);
+      API.markRead(msgs.filter(m => !m.read_by_staff).map(m => m.id), true).catch(() => { });
     }
   }
 
@@ -316,24 +367,25 @@
     const list = h("div", { class: "msgs" });
     const draw = (ms) => fill(list, ...(ms.length ? ms.map(m => h("div", { class: "msg" + (m.author_id === S.me.id ? " mine" : "") }, m.body, h("small", null, nameOf(m.author_id) + " · " + fmt(m.created_at)))) : [h("div", { class: "empty" }, asStaff ? "Aucun message. Écrivez un mot à l'élève sur cette question." : "Pose ta question : ton mentor te répondra ici.")]));
     draw(all);
-    const ta = h("textarea", { class: "in", placeholder: "Écris ton message…", rows: 2 });
+    const ta = h("textarea", { class: "in", placeholder: "Écris ton message…", rows: 1 });
+    ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; });
     const send = async () => { const b = ta.value.trim(); if (!b) return; ta.value = ""; const m = await API.postMessage(student.id, l.n, key, b); all.push(m); draw(all); list.scrollTop = 1e6; };
-    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer:coarse)").matches) { e.preventDefault(); send(); } });
     const d = h("div", { class: "drawer", onclick: (e) => { if (e.target === d) close(); } }, h("div", { class: "in2" },
-      h("header", null, h("div", null, h("h3", null, "Leçon " + l.n + " · " + title.slice(0, 70) + (title.length > 70 ? "…" : "")), h("p", null, asStaff ? "Conversation avec " + (student.full_name || student.username) : "Conversation avec ton mentor")), h("button", { onclick: () => close() }, "×")),
-      list, h("footer", null, ta, h("button", { class: "btn", onclick: send }, "Envoyer"))));
-    const close = () => { d.remove(); route(); };
-    document.body.append(d); list.scrollTop = 1e6; ta.focus();
+      h("header", null, h("button", { class: "dback", "aria-label": "Retour", onclick: () => close() }, ic("back")), h("div", { class: "avatar" }, asStaff ? initials(student.full_name) : "M"), h("div", { style: "min-width:0;flex:1" }, h("h3", null, asStaff ? (student.full_name || student.username) : "Mon mentor"), h("p", null, "Leçon " + l.n + " · " + title.slice(0, 80) + (title.length > 80 ? "…" : ""))), h("button", { class: "dx", "aria-label": "Fermer", onclick: () => close() }, "×")),
+      list, h("footer", null, ta, h("button", { class: "sendbtn", "aria-label": "Envoyer", onclick: send }, ic("send")))));
+    const close = () => { d.remove(); document.body.classList.remove("noscroll"); route(); };
+    document.body.append(d); document.body.classList.add("noscroll"); list.scrollTop = 1e6; if (!matchMedia("(pointer:coarse)").matches) ta.focus();
     const unreadIds = all.filter(m => asStaff ? !m.read_by_staff : !m.read_by_student).map(m => m.id);
-    if (unreadIds.length) API.markRead(unreadIds, asStaff);
+    if (unreadIds.length) API.markRead(unreadIds, asStaff).catch(() => { });
   }
 
   // ---------- test final ----------
   function renderTest(el, l, student, attempts, review, preview) {
     const best = attempts.reduce((b, q) => !b || q.score / q.total > b.score / b.total ? q : b, null);
     if (review) {
-      add(el, h("div", { class: "card", style: "margin-top:14px" }, h("h2", null, "Résultats du test"), attempts.length ? h("table", { class: "t" }, h("tr", null, h("th", null, "Date"), h("th", null, "Score"), h("th", null, "Résultat")),
-        attempts.map(a => h("tr", null, h("td", null, fmt(a.created_at)), h("td", null, a.score + " / " + a.total), h("td", null, a.score / a.total >= PASS ? h("span", { class: "chip v" }, "Réussi") : h("span", { class: "chip r" }, "À refaire"))))) : h("p", { class: "muted" }, "Pas encore de tentative.")));
+      add(el, h("div", { class: "card", style: "margin-top:14px" }, h("h2", null, "Résultats du test"), attempts.length ? labelize(h("table", { class: "t" }, h("tr", null, h("th", null, "Date"), h("th", null, "Score"), h("th", null, "Résultat")),
+        attempts.map(a => h("tr", null, h("td", null, fmt(a.created_at)), h("td", null, a.score + " / " + a.total), h("td", null, a.score / a.total >= PASS ? h("span", { class: "chip v" }, "Réussi") : h("span", { class: "chip r" }, "À refaire")))))) : h("p", { class: "muted" }, "Pas encore de tentative.")));
       return;
     }
     const answers = {};
@@ -432,7 +484,7 @@
             : "Aucun élève ne vous est encore attribué. Le superadmin vous les attribue depuis « Administration »."));
     };
     draw();
-    shell("#/mentor", unread, h("div", { class: "wrap page" },
+    shell("#/mentor", unread, h("div", { class: "wrap page" }, installCard(),
       h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, S.me.role === "superadmin" ? "SUPERADMIN" : "MENTOR"), h("h1", null, "Bonjour, " + (S.me.full_name || S.me.username)), h("p", null, "Suivez vos élèves, corrigez leurs cahiers et répondez à leurs questions."))),
       h("div", { class: "stats" }, h("div", { class: "stat" }, h("b", null, students.length), h("span", null, "Élèves")), h("div", { class: "stat" }, h("b", null, toReview), h("span", null, "Cahiers à corriger")), h("div", { class: "stat" }, h("b", null, unread), h("span", null, "Questions non lues")), h("div", { class: "stat" }, h("b", null, revs.filter(r => r.validated).length), h("span", null, "Leçons validées"))),
       body));
@@ -442,18 +494,19 @@
     const s = await API.getUser(sid); if (!s) return go("#/mentor");
     const [unlocks, meta, revs, quiz, msgs, unread, classes, users] = await Promise.all([API.listUnlocks(), API.listAnswersMeta([sid]), API.listReviews([sid]), API.listQuiz([sid]), API.listMessages([sid]), unreadCount(), API.listClasses(), API.listUsers()]);
     const unl = unlockedFor(s, unlocks); const c = classes.find(x => x.id === s.class_id), mentor = users.find(u => u.id === s.mentor_id);
-    shell("#/mentor", unread, h("div", { class: "wrap page" }, h("a", { href: "#/mentor" }, "← Tableau de bord"),
-      h("div", { class: "card", style: "margin-top:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap" }, h("div", { class: "avatar", style: "width:56px;height:56px;font-size:20px" }, initials(s.full_name)),
+    S.deep = { back: "#/mentor", title: s.full_name || s.username, sub: "Suivi de l'élève" };
+    shell("#/mentor", unread, h("div", { class: "wrap page" }, h("a", { class: "desk", href: "#/mentor" }, "← Tableau de bord"),
+      h("div", { class: "card pcard", style: "margin-top:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap" }, h("div", { class: "avatar", style: "width:56px;height:56px;font-size:20px" }, initials(s.full_name)),
         h("div", { style: "flex:1" }, h("h2", { style: "margin:0" }, s.full_name || s.username), h("div", { class: "muted" }, "@" + s.username + " · " + (c ? c.name : "sans classe") + " · mentor : " + (mentor ? mentor.full_name : "—"))),
         h("button", { class: "btn ghost sm", onclick: () => resetPw(s) }, "Nouveau mot de passe")),
-      PHASES.map(p => h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Phase " + p.n + " · " + p.t), h("table", { class: "t" }, h("tr", null, h("th", null, "Leçon"), h("th", null, "Statut"), h("th", null, "Test"), h("th", null, "Questions"), h("th", null, "Accès individuel")),
+      PHASES.map(p => h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Phase " + p.n + " · " + p.t), labelize(h("table", { class: "t" }, h("tr", null, h("th", null, "Leçon"), h("th", null, "Statut"), h("th", null, "Test"), h("th", null, "Questions"), h("th", null, "Accès individuel")),
         LESSONS.filter(l => l.ph === p.n).map(l => { const m = meta.find(x => x.lesson === l.n), r = revs.find(x => x.lesson === l.n), q = bestQuiz(quiz, sid, l.n), st = lessonStatus(l.n, unl, m, r, q);
           const own = unlocks.some(u => u.student_id === sid && u.lesson === l.n), viaClass = unlocks.some(u => u.class_id && u.class_id === s.class_id && u.lesson === l.n);
           const um = msgs.filter(x => x.lesson === l.n), uu = um.filter(x => !x.read_by_staff).length;
           return h("tr", null, h("td", null, h("a", { href: "#/revue/" + sid + "/" + l.n, style: "font-weight:700;text-decoration:none" }, l.n + " · " + l.t)),
             h("td", null, h("span", { class: "chip " + { lk: "l", op: "l", ip: "l", sb: "g", vd: "v" }[st] }, { lk: "Verrouillée", op: "Ouverte", ip: "En cours", sb: "À corriger", vd: "Validée" }[st])),
             h("td", null, q ? q.score + "/" + q.total : "—"), h("td", null, um.length ? (um.length + (uu ? " (" + uu + " non lue" + (uu > 1 ? "s" : "") + ")" : "")) : "—"),
-            h("td", null, viaClass ? h("span", { class: "muted", style: "font-size:13px" }, "Ouverte pour la classe") : h("button", { class: "tg" + (own ? " on" : ""), onclick: async () => { await API.setUnlock({ student_id: sid }, l.n, !own); route(); } }, own ? "🔓 Ouverte" : "🔒 Débloquer"))); }))))));
+            h("td", null, viaClass ? h("span", { class: "muted", style: "font-size:13px" }, "Ouverte pour la classe") : h("button", { class: "tg" + (own ? " on" : ""), onclick: async () => { await API.setUnlock({ student_id: sid }, l.n, !own); route(); } }, own ? "🔓 Ouverte" : "🔒 Débloquer"))); })))))));
   }
 
   function resetPw(u) {
@@ -501,7 +554,7 @@
     const [users, classes, unread] = await Promise.all([API.listUsers(), API.listClasses(), unreadCount()]);
     const mentors = users.filter(u => u.role !== "student");
     const body = h("div");
-    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Utilisateurs"], ["deblocage", "Déblocage des leçons"], ["classes", "Classes"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
+    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Utilisateurs"], ["deblocage", "Déblocage"], ["classes", "Classes"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
     if (tab === "users") {
       let q = "", rf = "all";
       const search = h("input", { class: "in", placeholder: "Rechercher un nom ou un identifiant…", style: "max-width:320px" });
@@ -509,7 +562,7 @@
       const tbl = h("div", { class: "scroll" });
       const draw = () => {
         const list = users.filter(u => (rf === "all" || u.role === rf) && ((u.full_name || "") + " " + u.username).toLowerCase().includes(q));
-        fill(tbl, h("table", { class: "t" }, h("tr", null, ["Nom", "Identifiant", "Rôle", "Mentor", "Classe", "Actif", ""].map(t => h("th", null, t))),
+        fill(tbl, labelize(h("table", { class: "t users" }, h("tr", null, ["Nom", "Identifiant", "Rôle", "Mentor", "Classe", "Actif", ""].map(t => h("th", null, t))),
           list.map(u => { const sel = (opts, val, on, dis) => { const s = h("select", { class: "in", style: "padding:6px 8px;min-width:130px", disabled: dis }, opts.map(([v, t]) => h("option", { value: v }, t))); s.value = val || ""; s.onchange = () => on(s.value || null); return s; };
             const upd = async (patch) => { try { await API.updateUser(u.id, patch); Object.assign(u, patch); toast("Modifié ✓"); draw(); } catch (e) { toast(e.message); } };
             return h("tr", null, h("td", { style: "font-weight:700" }, u.full_name || "—"), h("td", null, u.username),
@@ -517,11 +570,11 @@
               h("td", null, u.role === "student" ? sel([["", "— aucun —"], ...mentors.map(m => [m.id, m.full_name || m.username])], u.mentor_id, (v) => upd({ mentor_id: v })) : "—"),
               h("td", null, sel([["", "— aucune —"], ...classes.map(c => [c.id, c.name])], u.class_id, (v) => upd({ class_id: v }))),
               h("td", null, h("button", { class: "tg" + (u.active ? " on" : ""), disabled: u.id === S.me.id, onclick: () => upd({ active: !u.active }) }, u.active ? "Actif" : "Désactivé")),
-              h("td", null, h("div", { class: "row", style: "flex-wrap:nowrap" }, h("button", { class: "btn ghost sm", onclick: () => resetPw(u) }, "Mot de passe"), u.role === "student" ? h("a", { class: "btn ghost sm", href: "#/eleve/" + u.id }, "Suivi") : null))); })));
+              h("td", null, h("div", { class: "row", style: "flex-wrap:nowrap" }, h("button", { class: "btn ghost sm", onclick: () => resetPw(u) }, "Mot de passe"), u.role === "student" ? h("a", { class: "btn ghost sm", href: "#/eleve/" + u.id }, "Suivi") : null))); }))));
       };
       search.oninput = () => { q = search.value.toLowerCase(); draw(); }; roleF.onchange = () => { rf = roleF.value; draw(); };
       draw();
-      body.append(h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "row", style: "margin-bottom:14px" }, h("button", { class: "btn gold", onclick: () => createUserModal(classes, mentors) }, "+ Créer un utilisateur"), search, roleF, h("span", { class: "spacer" }), h("span", { class: "muted", style: "font-size:13px" }, users.filter(u => u.role === "student").length + " élèves · " + mentors.length + " mentors / admins")),
+      body.append(h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "row toolbar", style: "margin-bottom:14px" }, h("button", { class: "btn gold", onclick: () => createUserModal(classes, mentors) }, "+ Créer un utilisateur"), search, roleF, h("span", { class: "spacer" }), h("span", { class: "muted", style: "font-size:13px" }, users.filter(u => u.role === "student").length + " élèves · " + mentors.length + " mentors / admins")),
         h("div", { class: "note", style: "margin-bottom:12px" }, "Créez vous-même les comptes (bouton « Créer un utilisateur ») et communiquez à chacun son identifiant et son mot de passe. Les élèves peuvent aussi créer leur compte avec le code de leur classe. Changez ici le rôle, le mentor et la classe de chacun."), tbl));
     } else if (tab === "deblocage") {
       const unlocks = await API.listUnlocks();
@@ -578,9 +631,13 @@
     const unread = await unreadCount();
     const name = h("input", { class: "in", value: S.me.full_name || "" }), pw = h("input", { class: "in", type: "password", placeholder: "Nouveau mot de passe" });
     shell("#/profil", unread, h("div", { class: "wrap page", style: "max-width:560px" }, h("h1", null, "Mon profil"),
-      h("div", { class: "card" }, h("div", { class: "muted" }, "Identifiant : ", h("b", null, S.me.username), " · Rôle : ", { student: "élève", admin: "mentor", superadmin: "superadmin" }[S.me.role]),
+      h("div", { class: "card profhead" }, h("div", { class: "avatar big" }, initials(S.me.full_name || S.me.username)), h("div", null, h("b", null, S.me.full_name || S.me.username), h("div", { class: "muted" }, "@" + S.me.username))),
+      h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "muted" }, "Identifiant : ", h("b", null, S.me.username), " · Rôle : ", { student: "élève", admin: "mentor", superadmin: "superadmin" }[S.me.role]),
         h("label", { class: "f" }, "Mon nom complet"), name, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { S.me = await API.updateUser(S.me.id, { full_name: name.value.trim() }); toast("Nom enregistré"); } catch (e) { toast(e.message); } } }, "Enregistrer"),
         h("label", { class: "f", style: "margin-top:22px" }, "Changer mon mot de passe"), pw, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { await API.changeMyPassword(pw.value); pw.value = ""; toast("Mot de passe modifié"); } catch (e) { toast(e.message); } } }, "Modifier")),
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "L'application"),
+        standalone() ? h("p", { class: "muted" }, "✓ L'application est installée sur cet appareil.") : [h("p", { class: "muted" }, "Installe l'application sur ton téléphone : elle s'ouvre en plein écran depuis ton écran d'accueil, comme WhatsApp."), h("button", { class: "btn gold sm", onclick: doInstall }, "📲 Installer l'application")],
+        h("button", { class: "btn ghost sm", style: "margin-top:14px;width:100%", onclick: logout }, ic("out"), "Se déconnecter")),
       API.mode === "demo" ? h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Mode démonstration"), h("p", { class: "muted" }, "Remettre la démonstration à zéro efface toutes les données de test de ce navigateur."), h("button", { class: "btn bad sm", onclick: async () => { await API.resetDemo(); location.hash = "#/"; location.reload(); } }, "Réinitialiser la démo")) : null));
   }
 

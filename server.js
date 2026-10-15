@@ -312,7 +312,7 @@ route("POST", "/api/messages/read", ({ me, body }) => {
 });
 
 // ---------- fichiers statiques ----------
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".json": "application/json",
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".json": "application/json", ".webmanifest": "application/manifest+json",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".pdf": "application/pdf", ".woff2": "font/woff2" };
 function serveStatic(req, res, pathname) {
   if (pathname === "/js/config.js") { res.writeHead(200, { "Content-Type": TYPES[".js"], "Cache-Control": "no-store" }); return res.end('window.APP_CONFIG = { server: true };'); }
@@ -321,7 +321,7 @@ function serveStatic(req, res, pathname) {
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(PUBLIC, "index.html");
   const ext = path.extname(file).toLowerCase();
-  res.writeHead(200, { "Content-Type": TYPES[ext] || "application/octet-stream", "Cache-Control": [".html", ".js", ".css"].includes(ext) ? "no-cache" : "public, max-age=3600", "X-Content-Type-Options": "nosniff" });
+  res.writeHead(200, { "Content-Type": TYPES[ext] || "application/octet-stream", "Cache-Control": [".html", ".js", ".css", ".webmanifest"].includes(ext) ? "no-cache" : "public, max-age=3600", "X-Content-Type-Options": "nosniff", ...(ext === ".js" && rel === "/sw.js" ? { "Service-Worker-Allowed": "/" } : {}) });
   fs.createReadStream(file).pipe(res);
 }
 
