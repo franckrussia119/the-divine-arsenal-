@@ -1,129 +1,92 @@
 # École de disciples · The Divine Arsenal Corporation
 
-Plateforme en ligne du cahier d'exercices : les élèves se connectent, lisent le résumé de chaque leçon, remplissent leur cahier en ligne, posent leurs questions au mentor sur une question précise et passent un test à la fin de chaque leçon. Les mentors débloquent les leçons, corrigent et valident. Le superadmin gère toute la plateforme.
-
-- **36 leçons** (phases 1, 2 et 3) : résumé du cours, cahier complet (A à E + bilan), test de 10 questions.
-- **3 rôles** : élève, mentor (admin), superadmin.
-- **Sans installation pour essayer** : ouvrez `index.html` avec un petit serveur, l'application démarre en *mode démonstration*.
+Plateforme en ligne du cahier d'exercices (36 leçons, phases 1 à 3).
+Élèves, mentors et superadmin. **Tout tourne dans un seul conteneur Docker** : un petit serveur Node.js
+(aucune dépendance à installer) et une base de données SQLite enregistrée sur un **volume persistant Coolify**.
 
 ---
 
-## 1. Essayer tout de suite (mode démonstration)
+## Déployer sur Coolify (depuis GitHub)
 
-Sur votre ordinateur, dans ce dossier :
+### 1. Mettre le code sur GitHub
+Créez un dépôt (privé conseillé) et envoyez-y **le contenu** de ce dossier : `Dockerfile`, `server.js`,
+`package.json`, `README.md` et le dossier `public/`. Le `Dockerfile` doit être à la **racine** du dépôt.
 
+### 2. Créer l'application dans Coolify
+1. **Projects → votre projet → + New → Private Repository (with GitHub App)** (ou *Public Repository*), branche `main`.
+2. **Build Pack : `Dockerfile`**.
+3. **Ports Exposes : `3000`**.
+4. **Domains** : votre adresse, par ex. `https://ecole.votredomaine.org`.
+
+### 3. Ajouter le stockage persistant (indispensable)
+Onglet **Persistent Storage → + Add → Volume Mount** :
+
+| Champ | Valeur |
+|---|---|
+| Name | `ecole-data` (au choix) |
+| Destination Path | **`/data`** |
+
+Sans ce volume, les comptes et les cahiers seraient effacés à chaque redéploiement.
+
+### 4. Variables d'environnement
+Onglet **Environment Variables** :
+
+| Variable | Obligatoire | Valeur | Rôle |
+|---|---|---|---|
+| `SUPERADMIN_USERNAME` | **oui** | ex. `admin` | Identifiant du superadmin, créé au premier démarrage |
+| `SUPERADMIN_PASSWORD` | **oui** | un mot de passe solide | Mot de passe du superadmin (au premier démarrage) |
+| `SUPERADMIN_NAME` | non | ex. `Pasteur Jean` | Nom affiché du superadmin |
+| `PORT` | non | `3000` (défaut) | Port interne ; doit correspondre à *Ports Exposes* |
+| `DATA_DIR` | non | `/data` (défaut) | Dossier de la base ; doit correspondre au volume |
+| `SESSION_DAYS` | non | `30` (défaut) | Durée de connexion avant de devoir se reconnecter |
+| `ALLOW_SIGNUP` | non | `true` (défaut) | `false` ferme les inscriptions par code de classe |
+| `COOKIE_SECURE` | non | `auto` (défaut) | `auto` = sécurisé dès que le site est en HTTPS |
+| `SUPERADMIN_RESET_PASSWORD` | non | `false` (défaut) | Mettez `true` **une seule fois** pour réimposer `SUPERADMIN_PASSWORD` si vous l'avez oublié, redéployez, puis remettez `false` |
+
+### 5. Déployer
+Cliquez **Deploy**. Les journaux doivent afficher :
 ```
-python3 -m http.server 8000
+Superadmin créé : admin
+École de disciples : http://0.0.0.0:3000  (données : /data)
 ```
-
-puis ouvrez http://localhost:8000. Comptes de test :
-
-| Rôle | Identifiant | Mot de passe |
-|---|---|---|
-| Élève | `etudiant` | `etudiant123` |
-| Mentor | `mentor` | `mentor123` |
-| Superadmin | `admin` | `admin123` |
-
-Code de classe pour créer un compte : `DEMO2026`. Les données restent dans le navigateur.
+Activez **Auto Deploy** pour que chaque `git push` mette le site à jour.
 
 ---
 
-## 2. Créer la base de données (Supabase, gratuit)
+## Premier démarrage
+1. Connectez-vous avec `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD`.
+2. **Administration → Classes → Nouvelle classe** : nom + code d'inscription.
+3. **Mentors** : ils créent leur compte avec le code d'une classe ; dans **Administration → Élèves et mentors**,
+   passez leur rôle à **Mentor**, puis choisissez-les comme mentor de la classe (**Classes → Modifier**).
+4. **Élèves** : ils créent leur compte avec le code de leur classe et sont rattachés au mentor de la classe.
+   Vous pouvez attribuer chaque élève à un autre mentor (colonne *Mentor*).
+5. Le mentor **débloque les leçons** dans son *Tableau de bord* (classe entière) ou dans la fiche d'un élève.
 
-1. Créez un compte sur https://supabase.com puis **New project** (choisissez un mot de passe et la région la plus proche, par exemple *Europe (Frankfurt)*).
-   - *Variante :* Coolify peut aussi héberger Supabase lui-même (Resources → New → Services → Supabase). Les étapes suivantes sont identiques dans « Supabase Studio ».
-2. Menu **SQL Editor** → **New query** → collez tout le contenu du fichier `supabase/schema.sql` → **Run**. Vous devez voir « Success ».
-3. Menu **Authentication → Sign In / Providers → Email** : laissez *Email* activé et **désactivez « Confirm email »** (les élèves se connectent avec un identifiant, pas avec une vraie adresse e-mail). Enregistrez.
-4. Menu **Project Settings → API** (ou **Data API**) : copiez
-   - **Project URL** (ex. `https://abcd1234.supabase.co`)
-   - la clé **anon public**.
+## Qui fait quoi
+- **Élève** : résumé du cours (PDF / Word), cahier en ligne avec enregistrement automatique, questions au mentor
+  sur une question précise, test final (réussi à 7/10, essais illimités), corrections et validation.
+- **Mentor** : suivi de ses élèves, déblocage des leçons, lecture de tout le cahier, ✓ / ✗ et commentaire par réponse,
+  appréciation, validation de la leçon, réponses aux questions, nouveau mot de passe pour ses élèves.
+- **Superadmin** : tout ce que fait un mentor pour tous les élèves, plus la gestion des comptes (rôles, mentor,
+  classe, activation, mots de passe) et des classes.
 
-> La clé *anon* peut être publique : la sécurité est assurée par les règles (RLS) du fichier `schema.sql`. Ne mettez **jamais** la clé *service_role* dans le site.
+## Sauvegardes
+Toutes les données sont dans le volume, fichier **`/data/ecole.db`** (avec `ecole.db-wal` et `ecole.db-shm`).
+Pour une sauvegarde : dans Coolify, utilisez la sauvegarde du volume, ou copiez ces fichiers depuis le terminal
+du conteneur (de préférence application arrêtée).
 
----
-
-## 3. Mettre le code sur GitHub
-
-1. Sur https://github.com : **New repository** (par ex. `ecole-de-disciples`), *Private* conseillé.
-2. Envoyez ce dossier :
-   ```
-   git init
-   git add .
-   git commit -m "École de disciples"
-   git branch -M main
-   git remote add origin https://github.com/VOTRE-COMPTE/ecole-de-disciples.git
-   git push -u origin main
-   ```
-   (ou glissez-déposez les fichiers avec **Add file → Upload files**).
-
----
-
-## 4. Déployer sur Coolify
-
-1. Dans Coolify : **Projects → votre projet → + New → Private Repository (with GitHub App)** (ou *Public Repository* si le dépôt est public) et choisissez le dépôt.
-2. **Build Pack : Dockerfile** (le `Dockerfile` est à la racine). **Port exposé : 80**.
-3. Onglet **Environment Variables** : ajoutez
-   - `SUPABASE_URL` = votre Project URL
-   - `SUPABASE_ANON_KEY` = votre clé anon public
-4. Onglet **General → Domains** : votre domaine, par ex. `https://ecole.divinearsenal.org` (Coolify crée le certificat HTTPS).
-5. **Deploy**. À chaque `git push`, Coolify peut redéployer automatiquement (option *Auto Deploy*).
-
-Si les variables sont vides, le site démarre en mode démonstration : c'est le signe qu'elles ne sont pas prises en compte.
-
----
-
-## 5. Premier démarrage
-
-1. Ouvrez le site → **Créer mon compte**. **Le tout premier compte devient automatiquement superadmin** (pas besoin de code de classe pour celui-là). Créez-le vous-même, tout de suite.
-2. **Administration → Classes → Nouvelle classe** : nom, code d'inscription, mentor.
-3. **Mentors** : ils créent leur compte avec un code de classe, puis dans **Administration → Élèves et mentors** vous changez leur rôle en **Mentor**, puis vous les choisissez comme mentor de leur classe (Administration → Classes → Modifier).
-4. **Élèves** : donnez-leur le code de leur classe. À l'inscription, ils sont rattachés automatiquement au mentor de la classe. Vous pouvez ensuite **attribuer chaque élève au mentor de votre choix** (colonne *Mentor*).
-5. Le mentor **débloque les leçons** depuis son *Tableau de bord* (pour toute la classe) ou depuis la fiche d'un élève (accès individuel).
-
----
-
-## 6. Qui fait quoi
-
-**Élève**
-- voit les leçons débloquées, lit le résumé (et le télécharge en PDF ou en Word) ;
-- remplit son cahier en ligne : verset, questions, vrai/faux, exercices, défi de 7 jours, journal, bilan — **enregistrement automatique** ;
-- clique « Poser une question au mentor » sous n'importe quelle question ;
-- envoie son cahier, passe le **test final** (réussi à 7/10, autant d'essais qu'il veut) ;
-- voit les corrections (✓ / ✗ et commentaires) et la validation de la leçon.
-
-**Mentor (admin)**
-- tableau de bord par classe : qui a commencé, envoyé, été validé, score au test ;
-- débloque/verrouille les leçons (classe entière ou un élève) ;
-- lit tout le cahier de ses élèves, met ✓ ou ✗ et un commentaire sur chaque réponse, voit la bonne réponse des vrai/faux, écrit une appréciation et **valide la leçon** ;
-- répond aux questions (boîte « Questions », non lues en premier) ;
-- peut redéfinir le mot de passe d'un de ses élèves.
-
-**Superadmin**
-- tout ce que fait un mentor, pour **tous** les élèves ;
-- gère les comptes : rôles, mentor de chaque élève, classe, activer/désactiver, nouveau mot de passe ;
-- crée et modifie les classes et leurs codes.
-
----
-
-## 7. Bon à savoir
-
-- **Mot de passe oublié** : le mentor ou le superadmin en définit un nouveau (bouton « Mot de passe »).
-- **Nombre d'élèves** : le plan gratuit de Supabase accepte largement plusieurs milliers d'élèves (50 000 utilisateurs actifs par mois, 500 Mo de données).
-- **Sauvegardes** : Supabase → *Database → Backups* (plan payant) ou export régulier depuis *Table Editor*.
-- Le score du test est calculé dans le navigateur de l'élève : suffisant pour un parcours de formation, pas pour un examen officiel.
-- **Modifier le contenu** des leçons : le fichier `js/content.js` contient tout le texte (résumés, questions, tests).
+## Essayer sur son ordinateur
+Avec Node.js 22.13 ou plus récent :
+```
+DATA_DIR=./data SUPERADMIN_USERNAME=admin SUPERADMIN_PASSWORD=admin123 COOKIE_SECURE=false node server.js
+```
+puis ouvrez http://localhost:3000.
+(Ouvert sans serveur, avec de simples fichiers, le site démarre en *mode démonstration*.)
 
 ## Structure
-
 ```
-index.html            page unique
-css/style.css         design (violet et or)
-js/config.js          configuration (générée par Docker en production)
-js/content.js         contenu des 36 leçons + tests
-js/api.js             accès aux données (démo ou Supabase)
-js/app.js             l'application
-img/logo.png          logo
-files/                supports de cours et cahiers (Word) à télécharger
-supabase/schema.sql   base de données et règles de sécurité
-Dockerfile, docker/   déploiement Coolify (nginx)
+Dockerfile        image Docker (Node 22, volume /data, port 3000)
+server.js         serveur : API, comptes, droits, base SQLite, fichiers du site
+package.json      informations du projet (aucune dépendance)
+public/           le site : index.html, css/, js/ (dont content.js = les 36 leçons et les tests), img/, files/
 ```

@@ -1,0 +1,9 @@
+{
+  "name": "ecole-de-disciples",
+  "version": "1.0.0",
+  "private": true,
+  "description": "École de disciples · The Divine Arsenal Corporation — cahier d'exercices en ligne",
+  "main": "server.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": { "start": "node --disable-warning=ExperimentalWarning server.js" }
+}
