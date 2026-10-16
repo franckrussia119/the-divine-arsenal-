@@ -54,10 +54,11 @@
   }
   function modal(title, body, actions) {
     const m = h("div", { class: "modal" });
-    m.addEventListener("click", (e) => { if (e.target === m) m.remove(); });
+    // Pas de fermeture en touchant le fond : sur téléphone, le clavier qui s'ouvre ou se ferme déplace
+    // la fenêtre et un simple toucher sur un champ pouvait la fermer. On ferme avec × ou « Annuler ».
     const close = m.remove.bind(m);
     m.remove = () => { document.body.classList.remove("noscroll"); close(); };
-    m.append(h("div", { class: "card sheet" }, h("div", { class: "grab" }), h("h2", null, title), h("div", { class: "sbody" }, body), h("div", { class: "row actions" }, actions(m))));
+    m.append(h("div", { class: "card sheet" }, h("div", { class: "grab" }), h("div", { class: "shead" }, h("h2", null, title), h("button", { class: "sx", type: "button", "aria-label": "Fermer", onclick: () => m.remove() }, "×")), h("div", { class: "sbody" }, body), h("div", { class: "row actions" }, actions(m))));
     document.body.append(m); document.body.classList.add("noscroll"); return m;
   }
 
@@ -371,7 +372,8 @@
     ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; });
     const send = async () => { const b = ta.value.trim(); if (!b) return; ta.value = ""; const m = await API.postMessage(student.id, l.n, key, b); all.push(m); draw(all); list.scrollTop = 1e6; };
     ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer:coarse)").matches) { e.preventDefault(); send(); } });
-    const d = h("div", { class: "drawer", onclick: (e) => { if (e.target === d) close(); } }, h("div", { class: "in2" },
+    let downOnBg = false;
+    const d = h("div", { class: "drawer", onpointerdown: (e) => { downOnBg = e.target === d; }, onclick: (e) => { if (e.target === d && downOnBg) close(); } }, h("div", { class: "in2" },
       h("header", null, h("button", { class: "dback", "aria-label": "Retour", onclick: () => close() }, ic("back")), h("div", { class: "avatar" }, asStaff ? initials(student.full_name) : "M"), h("div", { style: "min-width:0;flex:1" }, h("h3", null, asStaff ? (student.full_name || student.username) : "Mon mentor"), h("p", null, "Leçon " + l.n + " · " + title.slice(0, 80) + (title.length > 80 ? "…" : ""))), h("button", { class: "dx", "aria-label": "Fermer", onclick: () => close() }, "×")),
       list, h("footer", null, ta, h("button", { class: "sendbtn", "aria-label": "Envoyer", onclick: send }, ic("send")))));
     const close = () => { d.remove(); document.body.classList.remove("noscroll"); route(); };
