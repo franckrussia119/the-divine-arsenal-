@@ -41,6 +41,7 @@ Onglet **Environment Variables** :
 | `SESSION_DAYS` | non | `30` (défaut) | Durée de connexion avant de devoir se reconnecter |
 | `ALLOW_SIGNUP` | non | `true` (défaut) | `false` ferme les inscriptions par code de classe |
 | `COOKIE_SECURE` | non | `auto` (défaut) | `auto` = sécurisé dès que le site est en HTTPS |
+| `VAPID_SUBJECT` | non | ex. `mailto:vous@exemple.org` | Contact transmis aux services de notification (Google, Apple). Les clés des notifications sont créées automatiquement dans `/data/vapid.json` |
 | `SUPERADMIN_RESET_PASSWORD` | non | `false` (défaut) | Mettez `true` **une seule fois** pour réimposer `SUPERADMIN_PASSWORD` si vous l'avez oublié, redéployez, puis remettez `false` |
 
 ### 5. Déployer
@@ -76,6 +77,28 @@ Il faut que le site soit en **HTTPS** (Coolify le fait automatiquement avec votr
 
 Les mises à jour arrivent toutes seules : après un redéploiement, l'application charge la nouvelle version.
 
+## Communauté
+Un salon **Général** pour toute l'école et **un salon par leçon**. Messages, photos, réponses (citation du message),
+réactions (👍 ❤️ 🙏 🔥 😂 👏), transfert vers un autre salon, copie, suppression (son propre message ; les mentors
+et le superadmin peuvent modérer). Les échanges **restent** : les promotions suivantes les retrouvent.
+Un élève entre dans le salon d'une leçon dès que cette leçon lui est débloquée (pas de « spoiler »).
+- **Mentions** : taper `@` (ou le bouton @) puis choisir la personne ; elle reçoit une notification.
+- **Messages privés** : onglet « Messages privés » → « Nouveau message privé », ou toucher le nom / l'avatar d'un membre,
+  ou « Répondre en privé » sur un message (le message d'origine est cité). Seules les deux personnes voient la conversation.
+- **Qui a réagi** : toucher les réactions sous un message affiche la liste des personnes, par émoji.
+Les photos sont réduites sur le téléphone avant l'envoi et enregistrées dans `/data/uploads`.
+
+## Aperçu des leçons verrouillées
+L'élève touche une leçon encore fermée : il voit ce qu'il saura à la fin, ce qu'il va découvrir, les grands points et
+les textes à lire pour se préparer.
+
+## Notifications sur le téléphone
+Cloche 🔔 dans l'application + notifications sur le téléphone (même application fermée) :
+leçons débloquées, questions et réponses mentor ↔ élève, cahier envoyé, cahier corrigé, appréciation, leçon validée,
+réponses, mentions, messages privés et réactions dans la communauté, nouveaux messages dans les salons où l'on a déjà écrit.
+Chaque personne touche **« Activer »** (accueil, page Notifications ou Profil). Sur **iPhone**, il faut d'abord installer
+l'application sur l'écran d'accueil (iOS 16.4 ou plus récent). Le site doit être en **HTTPS**.
+
 ## Qui fait quoi
 - **Élève** : résumé du cours (PDF / Word), cahier en ligne avec enregistrement automatique, questions au mentor
   sur une question précise, test final (réussi à 7/10, essais illimités), corrections et validation.
@@ -85,7 +108,9 @@ Les mises à jour arrivent toutes seules : après un redéploiement, l'applicati
   classe, activation, mots de passe) et des classes.
 
 ## Sauvegardes
-Toutes les données sont dans le volume, fichier **`/data/ecole.db`** (avec `ecole.db-wal` et `ecole.db-shm`).
+Toutes les données sont dans le volume : la base **`/data/ecole.db`** (avec `ecole.db-wal` et `ecole.db-shm`),
+les photos de la communauté dans **`/data/uploads/`** et les clés des notifications dans **`/data/vapid.json`**
+(à garder : si elles changent, chacun devra réactiver les notifications).
 Pour une sauvegarde : dans Coolify, utilisez la sauvegarde du volume, ou copiez ces fichiers depuis le terminal
 du conteneur (de préférence application arrêtée).
 

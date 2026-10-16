@@ -40,6 +40,9 @@
   IC.back = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
   IC.send = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6 3 10l12 2-12 2z"/></svg>';
   IC.chev = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
+  IC.people = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M17 9a6 6 0 0 1-8.7 5.4L4 16l1.3-3.6A6 6 0 1 1 17 9z"/><path d="M20.5 20 19.3 16.9A5.5 5.5 0 0 0 17 8.8M9.5 15.6A5.5 5.5 0 0 0 17.7 19l2.8 1"/></svg>';
+  IC.bell = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
+  IC.cam = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
   const ic = (n) => h("span", { html: IC[n], style: "display:inline-flex" });
   const toast = (t) => { const el = h("div", { class: "toast" }, t); document.body.append(el); setTimeout(() => el.remove(), 2600); };
   const fmt = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
@@ -74,12 +77,15 @@
   const bestQuiz = (arr, sid, n) => arr.filter(q => q.student_id === sid && q.lesson === n).reduce((b, q) => !b || q.score / q.total > b.score / b.total ? q : b, null);
 
   // ---------- barre du haut ----------
-  const logout = async () => { if (!confirm("Se déconnecter ?")) return; await API.signOut(); S.me = null; go("#/"); route(); };
+  const logout = async () => { if (!confirm("Se déconnecter ?")) return;
+    try { const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription(); if (sub) await API.pushUnsubscribe(sub.endpoint); } catch (e) { }
+    await API.signOut(); S.me = null; go("#/"); route(); };
   function topbar(active, unread) {
     const nav = [];
-    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours", "Parcours"], ["#/questions", "chat", "Mes questions", "Questions"]);
-    else { nav.push(["#/mentor", "grid", "Tableau de bord", "Accueil"], ["#/lecons", "book", "Leçons", "Leçons"], ["#/inbox", "chat", "Questions", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration", "Admin"]); }
+    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours", "Parcours"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/questions", "chat", "Mes questions", "Mentor"]);
+    else { nav.push(["#/mentor", "grid", "Tableau de bord", "Accueil"], ["#/lecons", "book", "Leçons", "Leçons"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/inbox", "chat", "Questions", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration", "Admin"]); }
     nav.push(["#/profil", "user", "Profil", "Profil"]);
+    const tabs = nav.length > 5 ? nav.filter(x => x[0] !== "#/profil") : nav;
     const deep = S.deep; // écran secondaire : flèche retour (téléphone)
     return [
       API.mode === "demo" ? h("div", { class: "demo" }, "Mode démonstration : les données restent dans ce navigateur.") : null,
@@ -87,10 +93,13 @@
         deep ? h("a", { class: "backbtn mobile", href: deep.back, "aria-label": "Retour" }, ic("back")) : null,
         h("a", { class: "brand" + (deep ? " desk" : ""), href: "#/" }, h("img", { src: "img/logo.png", alt: "" }), h("div", null, h("b", null, "The Divine Arsenal Corporation"), h("small", null, "ÉCOLE DE DISCIPLES"))),
         deep ? h("div", { class: "toptitle mobile" }, h("b", null, deep.title), deep.sub ? h("small", null, deep.sub) : null) : null,
-        h("nav", { class: "nav" }, nav.map(([href, i, t]) => h("a", { href, class: active === href ? "on" : null, title: t }, ic(i), h("span", { class: "navlabel" }, t), (i === "chat" && unread) ? h("i", { class: "dot" }) : null)),
+        h("nav", { class: "nav" }, nav.map(([href, i, t]) => h("a", { href, class: active === href ? "on" : null, title: t }, ic(i), h("span", { class: "navlabel" }, t), (i === "chat" && unread) ? h("i", { class: "dot" }) : null, i === "people" ? h("i", { class: "dot cdot" + (S.cun ? "" : " hide") }) : null)),
+          h("a", { href: "#/notifications", class: active === "#/notifications" ? "on" : null, title: "Notifications" }, ic("bell"), h("i", { class: "nbadge" + (S.nun ? "" : " hide") }, S.nun > 9 ? "9+" : S.nun || "")),
           h("button", { title: "Déconnexion", onclick: logout }, ic("out"))),
-        !deep ? h("button", { class: "iconbtn mobile", title: "Déconnexion", "aria-label": "Déconnexion", onclick: logout }, ic("out")) : null)),
-      deep ? null : h("nav", { class: "tabbar" }, nav.map(([href, i, t, short]) => h("a", { href, class: active === href ? "on" : null }, h("span", { class: "ti" }, ic(i), (i === "chat" && unread) ? h("i", { class: "badge" }, unread > 9 ? "9+" : unread) : null), h("span", { class: "tl" }, short)))) ];
+        deep && deep.action ? h("a", { class: "iconbtn mobile", href: deep.action.href, title: deep.action.title, "aria-label": deep.action.title }, ic(deep.action.icon)) : null,
+        !deep ? h("a", { class: "bellbtn mobile", href: "#/notifications", "aria-label": "Notifications" }, ic("bell"), h("i", { class: "nbadge" + (S.nun ? "" : " hide") }, S.nun > 9 ? "9+" : S.nun || "")) : null,
+        !deep ? h("a", { class: "meavatar mobile", href: "#/profil", "aria-label": "Mon profil" }, initials(S.me.full_name || S.me.username)) : null)),
+      deep ? null : h("nav", { class: "tabbar" }, tabs.map(([href, i, t, short]) => h("a", { href, class: active === href ? "on" : null }, h("span", { class: "ti" }, ic(i), (i === "chat" && unread) ? h("i", { class: "badge" }, unread > 9 ? "9+" : unread) : null, i === "people" ? h("i", { class: "badge cbadge" + (S.cun ? "" : " hide") }, S.cun > 9 ? "9+" : S.cun || "") : null), h("span", { class: "tl" }, short)))) ];
   }
   async function unreadCount() {
     try {
@@ -107,6 +116,19 @@
     document.body.classList.toggle("is-deep", deep);
     fill(app, ...topbar(active, unread), h("main", { class: "screen" }, ...content));
     S.deep = null; scrollTo(0, 0);
+    refreshCBadge();
+  }
+  function refreshCBadge() {
+    if (!S.me) return;
+    API.notifications().then(r => { S.nun = r.unread;
+      document.querySelectorAll(".nbadge").forEach(b => { b.textContent = r.unread > 9 ? "9+" : r.unread; b.classList.toggle("hide", !r.unread); });
+      try { if (navigator.setAppBadge) r.unread ? navigator.setAppBadge(r.unread) : navigator.clearAppBadge(); } catch (e) { } }).catch(() => { });
+    API.communityRooms().then(r => {
+      S.cun = r.unread; S.crooms = r.rooms;
+      document.querySelectorAll(".cbadge").forEach(b => { b.textContent = r.unread > 9 ? "9+" : r.unread; b.classList.toggle("hide", !r.unread); });
+      document.querySelectorAll(".cdot").forEach(b => b.classList.toggle("hide", !r.unread));
+      document.querySelectorAll(".dc[data-room]").forEach(el => { const x = r.rooms.find(y => y.room === el.dataset.room); el.textContent = x ? (x.unread ? x.unread + " nouveau" + (x.unread > 1 ? "x" : "") : x.count + " message" + (x.count > 1 ? "s" : "")) : ""; el.classList.toggle("new", !!(x && x.unread)); });
+    }).catch(() => { });
   }
   // tableaux : chaque cellule reçoit l'intitulé de sa colonne (affichage en fiches sur téléphone)
   function labelize(t) {
@@ -155,7 +177,7 @@
     const form = h("form", { onsubmit: async (e) => { e.preventDefault(); err.classList.add("hide"); btn.disabled = true;
       try { if (mode === "up" && !f.n.value.trim()) throw new Error("Écris ton nom complet");
         S.me = mode === "in" ? await API.signIn(f.u.value, f.p.value) : await API.signUp({ username: f.u.value, password: f.p.value, full_name: f.n.value.trim(), class_code: f.c.value });
-        go(S.me.role === "student" ? "#/" : "#/mentor"); route(); }
+        go(S.me.role === "student" ? "#/" : "#/mentor"); route(); try { if (pushState() === "granted") subscribePush(true).catch(() => { }); } catch (e) { } }
       catch (x) { err.textContent = x.message; err.classList.remove("hide"); } finally { btn.disabled = false; } } },
       h("label", { class: "f" }, "Identifiant"), f.u, h("label", { class: "f" }, "Mot de passe"), f.p, signupOnly, btn, err);
     fill(app, h("div", { class: "login" },
@@ -179,7 +201,7 @@
     const current = LESSONS.find(l => ["op", "ip"].includes(st[l.n])) || LESSONS.find(l => st[l.n] !== "lk");
     const C = 2 * Math.PI * 52;
     const passes = LESSONS.filter(l => { const b = bestQuiz(quiz, S.me.id, l.n); return b && b.score / b.total >= PASS; }).length;
-    shell("#/", unread, h("div", { class: "wrap page" }, installCard(),
+    shell("#/", unread, h("div", { class: "wrap page" }, installCard(), pushCard(),
       h("div", { class: "welcome" },
         h("div", { class: "ring", html: `<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.15)" stroke-width="12" fill="none"/><circle cx="60" cy="60" r="52" stroke="#C9A227" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg><b>${pct}%<small>CAHIERS ENVOYÉS</small></b>` }),
         h("div", null, h("div", { class: "k" }, "BIENVENUE"), h("h1", null, "Shalom, " + (S.me.full_name || S.me.username).split(" ")[0] + " !"),
@@ -196,8 +218,21 @@
   function lessonCard(l, s, q) {
     const chips = { op: [h("span", { class: "chip w" }, "À commencer")], ip: [h("span", { class: "chip" }, "En cours")], sb: [h("span", { class: "chip g" }, "Envoyé au mentor")], vd: [h("span", { class: "chip ok" }, "✓ Validée")] }[s] || [];
     if (q) chips.push(h("span", { class: "chip" }, "Test " + q.score + "/" + q.total));
-    if (s === "lk") return h("div", { class: "lcard locked" }, h("div", { class: "n" }, "LEÇON " + l.n), h("h3", null, l.t), h("div", { class: "foot" }, h("span", { class: "chip l" }, ic("lock"), "Bientôt débloquée")), h("div", { class: "wm" }, l.n));
+    if (s === "lk") return h("button", { class: "lcard locked", type: "button", onclick: () => lessonPreview(l) }, h("div", { class: "n" }, "LEÇON " + l.n), h("h3", null, l.t), h("div", { class: "hk" }, l.hook), h("div", { class: "foot" }, h("span", { class: "chip l" }, ic("lock"), "Bientôt débloquée"), h("span", { class: "chip l" }, "👁 Aperçu")), h("div", { class: "wm" }, l.n));
     return h("a", { class: "lcard p" + l.ph, href: "#/lecon/" + l.n }, h("div", { class: "n" }, "LEÇON " + l.n), h("h3", null, l.t), h("div", { class: "hk" }, l.hook), h("div", { class: "foot" }, chips), h("div", { class: "wm" }, l.n));
+  }
+
+  // aperçu d'une leçon encore verrouillée
+  function lessonPreview(l) {
+    const ph = PHASES.find(p => p.n === l.ph) || {};
+    modal("Leçon " + l.n + " · " + l.t, h("div", { class: "preview" },
+      h("div", { class: "pv-band p" + l.ph }, h("div", { class: "k" }, "PHASE " + l.ph + (ph.t ? " · " + ph.t.toUpperCase() : "") + " · " + l.etape.toUpperCase()), h("div", { class: "pv-hook" }, "« " + l.hook + " »"), h("div", { class: "pv-fil" }, l.fil)),
+      h("h4", null, "🎯 À la fin de cette leçon, tu sauras"), h("p", { class: "pv-goal" }, l.wb.but),
+      h("h4", null, "✦ Ce que tu vas découvrir"), h("ul", { class: "pv-list" }, l.sup.dec.map(d => h("li", null, d))),
+      h("h4", null, "📌 Les grands points"), h("ol", { class: "pv-list" }, l.sup.pts.map(p => h("li", null, p[0]))),
+      h("h4", null, "📖 Pour te préparer"), h("p", null, "À lire : ", h("b", null, l.lire || l.wb.ref), h("br"), "Verset de la semaine : ", h("b", null, l.wb.ref)),
+      h("div", { class: "note", style: "margin-top:12px" }, "🔒 Cette leçon s'ouvrira quand ton mentor la débloquera. Tu pourras alors lire le résumé complet, remplir ton cahier, passer le test et rejoindre la discussion de la leçon.")),
+      (m) => [h("button", { class: "btn", onclick: () => m.remove() }, "J'ai hâte !")]);
   }
 
   // =============================== LEÇON ===============================
@@ -218,7 +253,8 @@
     const backHref = review ? "#/eleve/" + sid : preview ? "#/lecons" : "#/";
     const head = h("div", { class: "lhead p" + l.ph }, h("div", { class: "wrap" },
       h("a", { class: "back desk", href: backHref }, "← " + (review ? (student.full_name || student.username) : preview ? "Toutes les leçons" : "Mon parcours")),
-      h("div", { class: "k" }, "LEÇON " + l.n + " · " + l.etape.toUpperCase()), h("h1", null, l.t), h("div", { class: "fil" }, l.fil)));
+      h("div", { class: "k" }, "LEÇON " + l.n + " · " + l.etape.toUpperCase()), h("h1", null, l.t), h("div", { class: "fil" }, l.fil),
+      h("a", { class: "discuss", href: "#/communaute/" + l.n }, ic("people"), "Discussion de la leçon", h("span", { class: "dc", "data-room": l.n }))));
     const short = { support: "Résumé", cahier: review ? "Cahier" : "Cahier", test: "Test", questions: "Questions" };
     const tabsBar = h("div", { class: "ltabs" }, h("div", { class: "wrap" }, tabs.map(([k, t]) => h("a", { href: base + "/" + k, class: tab === k ? "on" : null, onclick: (e) => { e.preventDefault(); location.replace(base + "/" + k); } }, h("span", { class: "lt-long" }, t), h("span", { class: "lt-short" }, short[k]), (k === "questions" || (review && k === "cahier")) && unreadL ? h("span", { class: "c" }, unreadL) : null))));
     const body = h("div", { class: "wrap page lpage" });
@@ -447,6 +483,357 @@
         : h("div", { class: "empty card" }, "Aucune question pour l'instant. Pendant que tu remplis ton cahier, clique sur « Poser une question au mentor » sous une question.")));
   }
 
+  // =============================== NOTIFICATIONS ===============================
+  const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && API.mode === "server";
+  const pushState = () => !pushOK() ? (isIOS() && !standalone() ? "ios-install" : "unsupported") : Notification.permission; // default | granted | denied
+  const b64ToU8 = (b) => { const s = atob((b + "=".repeat((4 - b.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+  async function subscribePush(silent) {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    const key = await API.pushKey();
+    if (sub && sub.options && sub.options.applicationServerKey) { const cur = btoa(String.fromCharCode(...new Uint8Array(sub.options.applicationServerKey))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); if (cur !== key) { await sub.unsubscribe(); sub = null; } }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+    await API.pushSubscribe(sub.toJSON());
+    if (!silent) await API.pushTest();
+  }
+  async function enablePush() {
+    const st = pushState();
+    if (st === "ios-install") return modal("Notifications sur iPhone", h("div", { class: "steps" }, h("p", null, "Sur iPhone, les notifications marchent quand l'application est installée :"), h("ol", null, h("li", null, "Dans Safari, touchez ", h("b", null, "Partager"), " ↑ puis ", h("b", null, "« Sur l'écran d'accueil »"), "."), h("li", null, "Ouvrez l'application depuis son icône."), h("li", null, "Revenez ici et touchez ", h("b", null, "« Activer les notifications »"), "."))), (m) => [h("button", { class: "btn", onclick: () => m.remove() }, "J'ai compris")]);
+    if (st === "unsupported") return toast("Ce navigateur ne gère pas les notifications. Essaie avec Chrome.");
+    if (st === "denied") return modal("Notifications bloquées", h("p", null, "Les notifications ont été refusées pour ce site. Pour les réactiver : ouvrez les réglages du navigateur (ou appui long sur l'icône de l'application → Infos), puis ", h("b", null, "Notifications → Autoriser"), "."), (m) => [h("button", { class: "btn", onclick: () => m.remove() }, "OK")]);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { toast("Notifications non autorisées"); return route(); }
+      await subscribePush(false); toast("Notifications activées 🔔"); route();
+    } catch (e) { toast("Activation impossible : " + e.message); }
+  }
+  function pushCard() {
+    const st = pushState(); if (st === "granted" || st === "unsupported") return null;
+    let x = false; try { x = localStorage.getItem("dac-push-x") === "1"; } catch (e) { } if (x && st !== "ios-install") return null;
+    const c = h("div", { class: "installcard pushcard" }, h("div", { class: "pic" }, ic("bell")),
+      h("div", { class: "ic-t" }, h("b", null, st === "denied" ? "Notifications bloquées" : "Active les notifications"), h("span", null, "Nouvelles leçons, messages, réponses : sois prévenu.")),
+      h("button", { class: "btn gold sm", onclick: enablePush }, "Activer"),
+      h("button", { class: "x", "aria-label": "Fermer", onclick: () => { try { localStorage.setItem("dac-push-x", "1"); } catch (e) { } c.remove(); } }, "×"));
+    return c;
+  }
+  const NICON = { unlock: "🔓", answer: "💬", question: "💬", reply: "↩️", reaction: "❤️", community: "👥", submit: "📩", review: "✅", validated: "⭐", test: "🔔" };
+  async function viewNotifications() {
+    const [r, unread] = await Promise.all([API.notifications(), unreadCount()]);
+    const items = r.items;
+    const open = async (n) => { if (!n.read) { await API.notifRead({ ids: [n.id] }).catch(() => { }); } location.hash = n.url || "#/"; };
+    const groups = {}; items.forEach(n => { const d = dayLabel(n.created_at); (groups[d] = groups[d] || []).push(n); });
+    const st = pushState();
+    shell("#/notifications", unread, h("div", { class: "wrap page", style: "max-width:720px" },
+      h("div", { class: "row", style: "align-items:flex-end" }, h("h1", { style: "margin:0;flex:1" }, "Notifications"), r.unread ? h("button", { class: "btn ghost sm", onclick: async () => { await API.notifRead({ all: true }); route(); } }, "Tout marquer comme lu") : null),
+      h("div", { class: "card pushstate" }, h("div", { class: "pic" + (st === "granted" ? " on" : "") }, ic("bell")),
+        h("div", { style: "flex:1;min-width:0" }, h("b", null, st === "granted" ? "Notifications activées sur cet appareil" : "Notifications sur ton téléphone"),
+          h("div", { class: "muted", style: "font-size:13.5px" }, st === "granted" ? "Tu es prévenu même quand l'application est fermée." : st === "ios-install" ? "Sur iPhone : installe d'abord l'application." : st === "denied" ? "Elles sont bloquées dans les réglages du navigateur." : st === "unsupported" ? "Ce navigateur ne les gère pas (essaie Chrome)." : "Reçois une alerte pour chaque nouvelle leçon, message ou réponse.")),
+        st === "granted" ? h("button", { class: "btn ghost sm", onclick: async () => { await API.pushTest(); toast("Notification de test envoyée"); } }, "Tester") : st !== "unsupported" ? h("button", { class: "btn gold sm", onclick: enablePush }, "Activer") : null),
+      items.length ? Object.entries(groups).map(([d, ns]) => [h("div", { class: "nday" }, d), h("div", { class: "nlist" }, ns.map(n => h("button", { class: "nitem" + (n.read ? "" : " unread"), onclick: () => open(n) },
+        h("div", { class: "nic" }, NICON[n.kind] || "🔔"), h("div", { class: "nmid" }, h("b", null, n.title), n.body ? h("span", null, n.body) : null, h("small", null, whenShort(n.created_at))), n.read ? null : h("i", { class: "ndot" }))))])
+        : h("div", { class: "empty card", style: "margin-top:16px" }, "🔔", h("br"), "Aucune notification pour l'instant.", h("br"), "Tu seras prévenu ici des nouvelles leçons, des messages de ton mentor et des réponses de la communauté.")));
+  }
+
+  // =============================== COMMUNAUTÉ ===============================
+  S.peers = S.peers || {};
+  const isDM = (room) => String(room).startsWith("dm:");
+  const dmWith = (uid) => "dm:" + [S.me.id, uid].sort().join(":");
+  const dmPeerId = (room) => room.split(":").slice(1).find(x => x !== S.me.id);
+  const peerName = (room) => (S.peers[dmPeerId(room)] || {}).name || "Conversation privée";
+  const roomTitle = (room) => isDM(room) ? peerName(room) : room === "general" ? "Général · toute l'école" : "Leçon " + room + " · " + ((L[room] || {}).t || "");
+  const roomShort = (room) => isDM(room) ? peerName(room) : room === "general" ? "Général" : "Leçon " + room;
+  async function members() { if (!S.members) { S.members = await API.communityMembers(); S.members.forEach(m => { S.peers[m.id] = m; }); } return S.members; }
+  const roleLabel = (r) => r === "superadmin" ? "Responsable" : r === "admin" ? "Mentor" : "Élève";
+  function hhmm(d) { return new Date(d).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
+  function whenShort(d) {
+    const t = new Date(d), n = new Date(), y = new Date(n); y.setDate(n.getDate() - 1);
+    if (t.toDateString() === n.toDateString()) return hhmm(d);
+    if (t.toDateString() === y.toDateString()) return "Hier";
+    return t.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  }
+  function dayLabel(d) {
+    const t = new Date(d), n = new Date(), y = new Date(n); y.setDate(n.getDate() - 1);
+    if (t.toDateString() === n.toDateString()) return "Aujourd'hui";
+    if (t.toDateString() === y.toDateString()) return "Hier";
+    return t.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: t.getFullYear() === n.getFullYear() ? undefined : "numeric" });
+  }
+  async function accessibleRooms() {
+    if (isStaff()) return ["general", ...LESSONS.map(l => l.n)];
+    const unl = unlockedFor(S.me, await API.listUnlocks());
+    return ["general", ...LESSONS.filter(l => unl.has(l.n)).map(l => l.n)];
+  }
+  function roomAvatar(room) {
+    if (isDM(room)) { const id = dmPeerId(room); return h("div", { class: "ravatar dm", style: "background:" + nameColor(id) }, initials(peerName(room))); }
+    const l = L[room];
+    return h("div", { class: "ravatar " + (l ? "p" + l.ph : "gen") }, l ? room : "✦");
+  }
+
+  async function viewCommunity() {
+    const [stats, open, unread] = await Promise.all([API.communityRooms(), accessibleRooms(), unreadCount()]);
+    S.cun = stats.unread; S.crooms = stats.rooms;
+    stats.rooms.forEach(r => { if (r.peer) S.peers[r.peer.id] = { ...(S.peers[r.peer.id] || {}), ...r.peer }; });
+    let tab = "salons"; try { tab = sessionStorage.getItem("dac-ctab") || "salons"; } catch (e) { }
+    const dms = stats.rooms.filter(r => isDM(r.room)).sort((a, b) => (b.last ? b.last.created_at : "").localeCompare(a.last ? a.last.created_at : ""));
+    const dmUnread = dms.reduce((a, r) => a + r.unread, 0), roomUnread = stats.unread - dmUnread;
+    const ctabs = h("div", { class: "tabs ctabs" });
+    const salonsBox = h("div"), privBox = h("div");
+    const setTab = (t) => { tab = t; try { sessionStorage.setItem("dac-ctab", t); } catch (e) { }
+      fill(ctabs, h("button", { class: tab === "salons" ? "on" : null, onclick: () => setTab("salons") }, "Salons", roomUnread ? h("span", { class: "tcount" }, roomUnread) : null), h("button", { class: tab === "prives" ? "on" : null, onclick: () => setTab("prives") }, "Messages privés", dmUnread ? h("span", { class: "tcount" }, dmUnread) : null));
+      salonsBox.classList.toggle("hide", tab !== "salons"); privBox.classList.toggle("hide", tab !== "prives"); };
+    fill(privBox, h("button", { class: "btn gold newdm", onclick: () => pickPerson("Nouveau message privé", (u) => go("#/communaute/" + dmWith(u.id))) }, "✉️ Nouveau message privé"),
+      dms.length ? h("div", { class: "rooms" }, dms.map(x => h("a", { class: "room", href: "#/communaute/" + x.room }, roomAvatar(x.room),
+        h("div", { class: "rmid" }, h("div", { class: "rtop" }, h("b", null, x.peer ? x.peer.name : "Conversation"), x.last ? h("span", { class: "rtime" + (x.unread ? " new" : "") }, whenShort(x.last.created_at)) : null),
+          h("div", { class: "rbot" }, h("span", { class: "rprev" }, x.last ? [(x.last.mine ? "Moi : " : ""), x.last.image && !x.last.body ? "📷 Photo" : (x.last.image ? "📷 " : "") + x.last.body] : ""), x.unread ? h("span", { class: "rbadge" }, x.unread) : null)))))
+        : h("div", { class: "empty card" }, "✉️", h("br"), "Aucune conversation privée.", h("br"), "Écris directement à un autre disciple ou à ton mentor."));
+    const st = Object.fromEntries(stats.rooms.map(r => [r.room, r]));
+    let filter = "all", q = "";
+    const list = h("div", { class: "rooms" });
+    const search = h("input", { class: "in", type: "search", placeholder: "Rechercher une leçon…" });
+    const chips = h("div", { class: "fchips" });
+    const draw = () => {
+      fill(chips, [["all", "Tous"], ["1", "Phase 1"], ["2", "Phase 2"], ["3", "Phase 3"]].map(([k, t]) => h("button", { class: filter === k ? "on" : null, onclick: () => { filter = k; draw(); } }, t)));
+      const all = ["general", ...LESSONS.map(l => l.n)].filter(r => (filter === "all" || (L[r] && String(L[r].ph) === filter) || (r === "general" && filter === "all")) && roomTitle(r).toLowerCase().includes(q));
+      const isOpen = (r) => open.includes(r);
+      const act = all.filter(isOpen).sort((a, b) => { if (a === "general") return -1; if (b === "general") return 1; const la = st[a] && st[a].last ? st[a].last.created_at : "", lb = st[b] && st[b].last ? st[b].last.created_at : ""; if (la !== lb) return lb.localeCompare(la); return LESSONS.findIndex(l => l.n === a) - LESSONS.findIndex(l => l.n === b); });
+      const locked = all.filter(r => !isOpen(r));
+      const row = (r) => { const x = st[r], lk = !isOpen(r);
+        return h(lk ? "button" : "a", lk ? { class: "room locked", type: "button", onclick: () => lessonPreview(L[r]) } : { class: "room", href: "#/communaute/" + r },
+          roomAvatar(r),
+          h("div", { class: "rmid" }, h("div", { class: "rtop" }, h("b", null, roomTitle(r)), x && x.last ? h("span", { class: "rtime" + (x.unread ? " new" : "") }, whenShort(x.last.created_at)) : null),
+            h("div", { class: "rbot" }, h("span", { class: "rprev" }, lk ? "🔒 S'ouvrira quand la leçon sera débloquée" : x && x.last ? [(x.last.mine ? "Moi" : x.last.name.split(" ")[0]) + " : ", x.last.image && !x.last.body ? "📷 Photo" : (x.last.image ? "📷 " : "") + x.last.body] : r === "general" ? "Le salon de toute l'école : présente-toi !" : "Aucun message. Lance la discussion !"),
+              x && x.unread ? h("span", { class: "rbadge" }, x.unread > 99 ? "99+" : x.unread) : null))); };
+      fill(list, act.map(row), locked.length ? [h("div", { class: "rsec" }, "🔒 Bientôt (" + locked.length + ")"), locked.map(row)] : null, !act.length && !locked.length ? h("div", { class: "empty" }, "Aucun salon trouvé.") : null);
+    };
+    search.oninput = () => { q = search.value.toLowerCase(); draw(); };
+    draw();
+    shell("#/communaute", unread, h("div", { class: "wrap page" },
+      h("div", { class: "chero" }, h("div", null, h("div", { class: "k" }, "COMMUNAUTÉ"), h("h1", null, "Grandissons ensemble"), h("p", null, "Un salon par leçon pour échanger avec les autres disciples : questions, découvertes, photos, encouragements. Les échanges restent pour les promotions suivantes."))),
+      ctabs, salonsBox, privBox));
+    fill(salonsBox, h("div", { class: "csearch" }, search), chips, list);
+    setTab(tab);
+  }
+  // choisir une personne (message privé, mention)
+  async function pickPerson(title, onPick) {
+    const ms = await members();
+    const q = h("input", { class: "in", type: "search", placeholder: "Rechercher un nom…" });
+    const list = h("div", { class: "fwdlist plist" });
+    const draw = () => { const t = q.value.toLowerCase(); const r = ms.filter(u => (u.name + " " + u.username + " " + (u.class_name || "")).toLowerCase().includes(t)).slice(0, 60);
+      fill(list, r.length ? r.map(u => h("button", { onclick: () => { m.remove(); onPick(u); } }, h("div", { class: "ravatar dm", style: "background:" + nameColor(u.id) }, initials(u.name)), h("span", { class: "pmid" }, h("b", null, u.name), h("small", null, roleLabel(u.role) + (u.class_name ? " · " + u.class_name : ""))))) : h("div", { class: "empty" }, "Personne trouvé.")); };
+    q.oninput = draw; draw();
+    const m = modal(title, h("div", null, q, list), (mm) => [h("button", { class: "btn ghost", onclick: () => mm.remove() }, "Annuler")]);
+    if (!matchMedia("(pointer:coarse)").matches) q.focus();
+  }
+  // fiche d'un membre
+  function personSheet(u) {
+    if (u.id === S.me.id) return;
+    S.peers[u.id] = { ...(S.peers[u.id] || {}), ...u };
+    const m = modal(u.name, h("div", { class: "psheet" }, h("div", { class: "ravatar dm big", style: "background:" + nameColor(u.id) }, initials(u.name)), h("div", { class: "muted" }, roleLabel(u.role)),
+      h("button", { class: "btn gold", style: "width:100%;margin-top:14px", onclick: () => { m.remove(); go("#/communaute/" + dmWith(u.id)); } }, "✉️ Envoyer un message privé")), () => []);
+  }
+
+  // ---------- un salon ----------
+  async function viewRoom(room) {
+    const open = await accessibleRooms();
+    if (isDM(room)) { if (!room.split(":").includes(S.me.id)) { toast("Conversation introuvable"); return go("#/communaute"); } if (!S.peers[dmPeerId(room)]) await members().catch(() => { }); }
+    else if (!open.includes(room)) { if (L[room]) lessonPreview(L[room]); else toast("Salon introuvable"); return go("#/communaute"); }
+    const unread = await unreadCount();
+    const posts = new Map(); const nodes = new Map();
+    let rev = 0, more = false, replyTo = null, pendingImg = null, loadingOld = false;
+    const stream = h("div", { class: "stream" });
+    const intro = h("div", { class: "rintro" }, roomAvatar(room), h("b", null, roomTitle(room)),
+      h("p", null, isDM(room) ? "Conversation privée entre toi et " + peerName(room) + ". Vous seuls voyez ces messages." : room === "general" ? "Le salon de toute l'école. Présente-toi, partage un témoignage, encourage les autres." : "Discute de cette leçon avec les autres disciples : ce que tu as compris, tes questions, ce que Dieu t'a montré."),
+      isDM(room) ? null : h("p", { class: "muted", style: "font-size:12.5px" }, "📜 Les messages restent : les futurs élèves liront vos échanges. Parle avec respect et bienveillance."),
+      L[room] ? h("a", { class: "btn ghost sm", href: "#/lecon/" + room }, ic("book"), "Ouvrir la leçon") : null);
+    const olderBtn = h("button", { class: "older hide", onclick: () => loadOlder() }, "Voir les messages plus anciens");
+    const replyBar = h("div", { class: "replybar hide" });
+    const imgBar = h("div", { class: "imgbar hide" });
+    const ta = h("textarea", { class: "in", rows: 1, placeholder: "Écris un message…", maxlength: 4000 });
+    const file = h("input", { type: "file", accept: "image/*", class: "hide" });
+    const sendBtn = h("button", { class: "sendbtn", "aria-label": "Envoyer", onclick: () => send() }, ic("send"));
+    const suggest = h("div", { class: "suggest hide" });
+    const picked = new Map(); // nom → id des personnes mentionnées
+    const caretWord = () => { const v = ta.value.slice(0, ta.selectionStart); const m = /(^|\s)@([^\s@]{0,30})$/.exec(v); return m ? { q: m[2], start: v.length - m[2].length - 1 } : null; };
+    async function updateSuggest() {
+      const w = caretWord(); if (!w) return suggest.classList.add("hide");
+      const ms = (await members().catch(() => [])).filter(u => (u.name + " " + u.username).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(w.q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""))).slice(0, 6);
+      if (!ms.length) return suggest.classList.add("hide");
+      fill(suggest, ms.map(u => h("button", { type: "button", onmousedown: (e) => e.preventDefault(), onclick: () => {
+        const w2 = caretWord(); if (!w2) return; const before = ta.value.slice(0, w2.start), after = ta.value.slice(ta.selectionStart);
+        ta.value = before + "@" + u.name + " " + after; picked.set(u.name, u.id); S.peers[u.id] = u;
+        const pos = (before + "@" + u.name + " ").length; ta.focus(); ta.setSelectionRange(pos, pos); suggest.classList.add("hide"); } },
+        h("div", { class: "ravatar dm", style: "background:" + nameColor(u.id) }, initials(u.name)), h("span", { class: "pmid" }, h("b", null, u.name), h("small", null, roleLabel(u.role) + (u.class_name ? " · " + u.class_name : ""))))));
+      suggest.classList.remove("hide");
+    }
+    ta.addEventListener("input", updateSuggest); ta.addEventListener("click", updateSuggest);
+    ta.addEventListener("blur", () => setTimeout(() => suggest.classList.add("hide"), 200));
+    const mentionBtn = isDM(room) ? null : h("button", { class: "cambtn atbtn", "aria-label": "Mentionner quelqu'un", onclick: () => { const pos = ta.selectionStart || ta.value.length; const pre = ta.value.slice(0, pos); ta.value = pre + (pre && !/\s$/.test(pre) ? " @" : "@") + ta.value.slice(pos); ta.focus(); const np = pos + (pre && !/\s$/.test(pre) ? 2 : 1); ta.setSelectionRange(np, np); updateSuggest(); } }, "@");
+    const composer = h("div", { class: "composer" }, suggest, replyBar, imgBar, h("div", { class: "crow" }, h("button", { class: "cambtn", "aria-label": "Envoyer une photo", onclick: () => file.click() }, ic("cam")), mentionBtn, ta, sendBtn), file);
+    const box = h("div", { class: "roombox" }, h("div", { class: "scrollbox" }, olderBtn, intro, stream), composer);
+    const scroller = box.firstChild;
+    ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 130) + "px"; });
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer:coarse)").matches) { e.preventDefault(); send(); } });
+
+    // rendu d'un message
+    function linkify(text, mentions) {
+      const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const ms = (mentions || []).filter(m => m.name);
+      const re = new RegExp("(https?:\\/\\/[^\\s<]+)" + (ms.length ? "|(" + ms.map(m => "@" + esc(m.name)).join("|") + ")" : ""), "g");
+      const out = []; let last = 0, m;
+      while ((m = re.exec(text))) {
+        if (m.index > last) out.push(text.slice(last, m.index));
+        if (m[1]) out.push(h("a", { href: m[1], target: "_blank", rel: "noopener" }, m[1]));
+        else { const who = ms.find(x => "@" + x.name === m[0]); out.push(h("span", { class: "mention" + (who && who.id === S.me.id ? " me" : ""), onclick: (e) => { e.stopPropagation(); if (who) personSheet({ id: who.id, name: who.name, role: (S.peers[who.id] || {}).role }); } }, m[0])); }
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) out.push(text.slice(last)); return out;
+    }
+    function bubble(p) {
+      const mine = p.author.id === S.me.id, staff = p.author.role !== "student";
+      const b = h("div", { class: "bub" + (p.deleted ? " del" : "") },
+        !mine && !isDM(room) ? h("div", { class: "bname", style: "color:" + nameColor(p.author.id), onclick: (e) => { e.stopPropagation(); personSheet(p.author); } }, p.author.name, staff ? h("span", { class: "rolechip" }, p.author.role === "superadmin" ? "Responsable" : "Mentor") : null) : null,
+        p.fwd ? h("div", { class: "bfwd" }, "↪ Transféré · de " + p.fwd) : null,
+        p.reply ? h("div", { class: "bquote", onclick: (e) => { e.stopPropagation(); if (p.reply.room && p.reply.room !== room) go("#/communaute/" + p.reply.room); else jump(p.reply.id); } }, h("b", null, p.reply.name, p.reply.room && p.reply.room !== room ? h("small", null, " · " + roomShort(p.reply.room)) : null), h("span", null, p.reply.image ? "📷 " : "", p.reply.body || (p.reply.image ? "Photo" : ""))) : null,
+        p.image ? h("img", { class: "bimg", src: p.image, alt: "Photo", loading: "lazy", onclick: (e) => { e.stopPropagation(); viewer(p.image); } }) : null,
+        p.deleted ? h("div", { class: "btext" }, "🚫 Message supprimé") : p.body ? h("div", { class: "btext" }, linkify(p.body, p.mentions)) : null,
+        h("div", { class: "bmeta" }, hhmm(p.created_at)));
+      const rx = p.reactions.length ? h("div", { class: "rx" }, p.reactions.map(r => h("button", { class: r.mine ? "mine" : null, title: "Voir qui a réagi", onclick: (e) => { e.stopPropagation(); whoReacted(p); } }, r.emoji, h("span", null, r.n)))) : null;
+      const row = h("div", { class: "bm" + (mine ? " mine" : ""), id: "p-" + p.id }, !mine ? h("div", { class: "bav", style: "background:" + nameColor(p.author.id), onclick: () => personSheet(p.author) }, initials(p.author.name)) : null, h("div", { class: "bcol" }, b, rx));
+      if (!p.deleted) b.addEventListener("click", () => actions(p));
+      return row;
+    }
+    function render(stick) {
+      const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
+      const arr = [...posts.values()].sort((a, b) => a.id - b.id);
+      const kids = []; let lastDay = "", prev = null;
+      for (const p of arr) {
+        const d = new Date(p.created_at).toDateString();
+        if (d !== lastDay) { kids.push(h("div", { class: "dsep" }, h("span", null, dayLabel(p.created_at)))); lastDay = d; prev = null; }
+        let n = nodes.get(p.id);
+        if (!n || n.rev !== p.rev) { n = { rev: p.rev, el: bubble(p) }; nodes.set(p.id, n); }
+        n.el.classList.toggle("cont", !!(prev && prev.author.id === p.author.id && new Date(p.created_at) - new Date(prev.created_at) < 5 * 60e3));
+        kids.push(n.el); prev = p;
+      }
+      if (!arr.length) kids.push(h("div", { class: "cempty" }, "✨ Sois le premier à écrire ici !"));
+      stream.replaceChildren(...kids);
+      olderBtn.classList.toggle("hide", !more);
+      if (stick || nearBottom) scroller.scrollTop = scroller.scrollHeight;
+    }
+    function merge(list) { list.forEach(p => posts.set(p.id, p)); }
+    const maxId = () => Math.max(0, ...posts.keys());
+    const markRead = () => { const m = maxId(); if (m) API.communityRead(room, m).catch(() => { }); };
+
+    async function loadOlder() {
+      if (loadingOld || !more) return; loadingOld = true;
+      const first = Math.min(...posts.keys()), h0 = scroller.scrollHeight;
+      try { const r = await API.communityPosts(room, { before: first }); merge(r.posts); more = r.more; render(false); scroller.scrollTop = scroller.scrollHeight - h0; } finally { loadingOld = false; }
+    }
+    async function poll() {
+      if (document.hidden || !document.body.contains(box)) return;
+      try { const r = await API.communityPosts(room, { since: rev }); if (r.posts.length) { const before = maxId(); merge(r.posts); rev = Math.max(rev, r.rev); render(false); if (maxId() > before) markRead(); } } catch (e) { }
+    }
+    function jump(id) {
+      const el = document.getElementById("p-" + id);
+      if (!el) { toast("Message plus ancien : remonte la conversation"); return; }
+      el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600);
+    }
+    function setReply(p) {
+      replyTo = p;
+      if (!p) { replyBar.classList.add("hide"); return; }
+      fill(replyBar, h("div", { class: "rbq" }, h("b", null, "Réponse à " + (p.author.id === S.me.id ? "toi-même" : p.author.name)), h("span", null, p.image ? "📷 " : "", (p.body || "Photo").slice(0, 100))), h("button", { class: "x", "aria-label": "Annuler", onclick: () => setReply(null) }, "×"));
+      replyBar.classList.remove("hide"); ta.focus();
+    }
+    async function react(p, emoji) {
+      try { const np = await API.communityReact(p.id, emoji); posts.set(np.id, np); rev = Math.max(rev, np.rev); render(false); } catch (e) { toast(e.message); }
+    }
+    function actions(p) {
+      const mine = p.author.id === S.me.id;
+      const m = modal(p.author.id === S.me.id ? "Mon message" : "Message de " + p.author.name.split(" ")[0], h("div", null,
+        h("div", { class: "emorow" }, ["👍", "❤️", "🙏", "🔥", "😂", "👏"].map(e => h("button", { class: p.reactions.some(r => r.emoji === e && r.mine) ? "on" : null, onclick: () => { m.remove(); react(p, e); } }, e))),
+        h("div", { class: "actlist" },
+          h("button", { onclick: () => { m.remove(); setReply(p); } }, "↩️", h("span", null, "Répondre")),
+          !mine && !isDM(room) ? h("button", { onclick: () => { m.remove(); S.pendingReply = p; go("#/communaute/" + dmWith(p.author.id)); } }, "🔒", h("span", null, "Répondre en privé à " + p.author.name.split(" ")[0])) : null,
+          p.reactions.length ? h("button", { onclick: () => { m.remove(); whoReacted(p); } }, "👀", h("span", null, "Voir qui a réagi")) : null,
+          h("button", { onclick: () => { m.remove(); forward(p); } }, "↪️", h("span", null, "Transférer")),
+          p.body ? h("button", { onclick: async () => { m.remove(); try { await navigator.clipboard.writeText(p.body); toast("Texte copié"); } catch (e) { toast("Copie impossible"); } } }, "📋", h("span", null, "Copier le texte")) : null,
+          p.image ? h("button", { onclick: () => { m.remove(); viewer(p.image); } }, "🖼️", h("span", null, "Voir la photo")) : null,
+          mine || isStaff() ? h("button", { class: "danger", onclick: async () => { m.remove(); if (!confirm("Supprimer ce message pour tout le monde ?")) return; try { await API.communityDelete(p.id); const r = await API.communityPosts(room, { since: rev }); merge(r.posts); rev = Math.max(rev, r.rev); render(false); toast("Message supprimé"); } catch (e) { toast(e.message); } } }, "🗑️", h("span", null, "Supprimer" + (mine ? "" : " (modération)"))) : null)),
+        () => []);
+    }
+    async function whoReacted(p) {
+      const data = await API.communityReactions(p.id).catch(() => []);
+      const total = data.reduce((a, x) => a + x.users.length, 0);
+      let sel = "all"; const tabs = h("div", { class: "rtabs" }), list = h("div", { class: "fwdlist plist" });
+      const draw = () => {
+        fill(tabs, h("button", { class: sel === "all" ? "on" : null, onclick: () => { sel = "all"; draw(); } }, "Tous " + total), data.map(x => h("button", { class: sel === x.emoji ? "on" : null, onclick: () => { sel = x.emoji; draw(); } }, x.emoji + " " + x.users.length)));
+        const rows = data.filter(x => sel === "all" || x.emoji === sel).flatMap(x => x.users.map(u => ({ ...u, emoji: x.emoji })));
+        fill(list, rows.map(u => h("button", { onclick: () => { if (u.id !== S.me.id) { m.remove(); personSheet({ id: u.id, name: u.name, role: (S.peers[u.id] || {}).role }); } } }, h("div", { class: "ravatar dm", style: "background:" + nameColor(u.id) }, initials(u.name)), h("span", { class: "pmid" }, h("b", null, u.name), u.id === S.me.id ? h("small", null, "Touche le message pour changer ta réaction") : null), h("span", { class: "remo" }, u.emoji))));
+      };
+      draw();
+      const m = modal("Réactions", h("div", null, tabs, list), (mm) => [h("button", { class: "btn ghost", onclick: () => mm.remove() }, "Fermer")]);
+    }
+    async function forward(p) {
+      const rooms = [...(await accessibleRooms()), ...(S.crooms || []).filter(r => isDM(r.room)).map(r => r.room)].filter(r => r !== room);
+      const m = modal("Transférer vers…", h("div", { class: "fwdlist" }, rooms.map(r => h("button", { onclick: async () => { m.remove(); try { await API.communityPost(r, { forward_of: p.id }); toast("Transféré dans « " + roomShort(r) + " » ✓"); } catch (e) { toast(e.message); } } }, roomAvatar(r), h("span", null, roomTitle(r))))), (mm) => [h("button", { class: "btn ghost", onclick: () => mm.remove() }, "Annuler")]);
+    }
+    function viewer(src) {
+      const v = h("div", { class: "viewer", onclick: (e) => { if (e.target === v) v.remove(); } }, h("img", { src, alt: "" }),
+        h("div", { class: "vbar" }, h("a", { class: "btn ghost sm", href: src, download: "photo", style: "color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)" }, ic("dl"), "Enregistrer"), h("button", { class: "btn gold sm", onclick: () => v.remove() }, "Fermer")));
+      document.body.append(v);
+    }
+    // photo : réduite dans le téléphone avant l'envoi (rapide, même avec peu de réseau)
+    file.onchange = async () => {
+      const f = file.files[0]; file.value = ""; if (!f) return;
+      if (!/^image\//.test(f.type)) return toast("Choisis une image");
+      try {
+        const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+        const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+        const max = 1400, k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const cx = c.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0, c.width, c.height);
+        let data = c.toDataURL("image/jpeg", 0.82); if (data.length > 2.6e6) data = c.toDataURL("image/jpeg", 0.6);
+        pendingImg = data;
+        fill(imgBar, h("img", { src: data, alt: "" }), h("div", { class: "rbq" }, h("b", null, "📷 Photo prête"), h("span", null, "Ajoute une légende si tu veux, puis envoie.")), h("button", { class: "x", "aria-label": "Retirer", onclick: () => { pendingImg = null; imgBar.classList.add("hide"); } }, "×"));
+        imgBar.classList.remove("hide"); ta.focus();
+      } catch (e) { toast("Impossible de lire cette image"); }
+    };
+    let sending = false;
+    async function send() {
+      const text = ta.value.trim(); if ((!text && !pendingImg) || sending) return;
+      sending = true; sendBtn.disabled = true;
+      try {
+        let image = null;
+        if (pendingImg) { toast("Envoi de la photo…"); image = (await API.communityUpload(pendingImg)).url; }
+        const mentions = [...picked.entries()].filter(([n]) => text.includes("@" + n)).map(([, id]) => id);
+        const p = await API.communityPost(room, { body: text, image, reply_to: replyTo ? replyTo.id : null, mentions });
+        picked.clear(); suggest.classList.add("hide");
+        posts.set(p.id, p); rev = Math.max(rev, p.rev);
+        ta.value = ""; ta.style.height = "auto"; pendingImg = null; imgBar.classList.add("hide"); setReply(null);
+        render(true);
+      } catch (e) { toast(e.message); } finally { sending = false; sendBtn.disabled = false; }
+    }
+
+    S.deep = { back: "#/communaute", title: roomShort(room) + (L[room] ? " · " + L[room].t : ""), sub: isDM(room) ? "🔒 Message privé" : "Communauté · discussion", action: L[room] ? { href: "#/lecon/" + room, icon: "book", title: "Ouvrir la leçon" } : null };
+    shell("#/communaute", unread, box);
+    document.body.classList.add("is-room");
+    // la boîte occupe l'écran sous la barre du haut et suit le clavier du téléphone
+    const fit = () => { const top = (document.querySelector(".top") || {}).getBoundingClientRect ? document.querySelector(".top").getBoundingClientRect().bottom : 0; box.style.top = Math.max(0, top) + "px";
+      const vv = window.visualViewport; box.style.bottom = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) + "px" : "0px"; };
+    fit(); const vv = window.visualViewport;
+    if (vv) { vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); }
+    addEventListener("resize", fit);
+    S.vv = () => { if (vv) { vv.removeEventListener("resize", fit); vv.removeEventListener("scroll", fit); } removeEventListener("resize", fit); };
+    scroller.addEventListener("scroll", () => { if (scroller.scrollTop < 60) loadOlder(); });
+
+    const r = await API.communityPosts(room, {});
+    merge(r.posts); more = r.more; rev = r.rev; render(true); markRead();
+    if (S.pendingReply) { setReply(S.pendingReply); S.pendingReply = null; }
+    setTimeout(() => { scroller.scrollTop = scroller.scrollHeight; }, 300);
+    S.poll = setInterval(poll, 4000);
+    setTimeout(refreshCBadge, 800);
+  }
+  const NAMECOLS = ["#5B3A8C", "#1F6E8C", "#B5541C", "#1E7A5A", "#A3326B", "#8A6D12", "#3A4FA0", "#7A3E9D"];
+  function nameColor(id) { let x = 0; for (const c of String(id)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return NAMECOLS[x % NAMECOLS.length]; }
+
   // =============================== BIBLIOTHÈQUE DES LEÇONS (staff) ===============================
   async function viewLibrary() {
     const unread = await unreadCount();
@@ -486,7 +873,7 @@
             : "Aucun élève ne vous est encore attribué. Le superadmin vous les attribue depuis « Administration »."));
     };
     draw();
-    shell("#/mentor", unread, h("div", { class: "wrap page" }, installCard(),
+    shell("#/mentor", unread, h("div", { class: "wrap page" }, installCard(), pushCard(),
       h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, S.me.role === "superadmin" ? "SUPERADMIN" : "MENTOR"), h("h1", null, "Bonjour, " + (S.me.full_name || S.me.username)), h("p", null, "Suivez vos élèves, corrigez leurs cahiers et répondez à leurs questions."))),
       h("div", { class: "stats" }, h("div", { class: "stat" }, h("b", null, students.length), h("span", null, "Élèves")), h("div", { class: "stat" }, h("b", null, toReview), h("span", null, "Cahiers à corriger")), h("div", { class: "stat" }, h("b", null, unread), h("span", null, "Questions non lues")), h("div", { class: "stat" }, h("b", null, revs.filter(r => r.validated).length), h("span", null, "Leçons validées"))),
       body));
@@ -637,6 +1024,7 @@
       h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "muted" }, "Identifiant : ", h("b", null, S.me.username), " · Rôle : ", { student: "élève", admin: "mentor", superadmin: "superadmin" }[S.me.role]),
         h("label", { class: "f" }, "Mon nom complet"), name, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { S.me = await API.updateUser(S.me.id, { full_name: name.value.trim() }); toast("Nom enregistré"); } catch (e) { toast(e.message); } } }, "Enregistrer"),
         h("label", { class: "f", style: "margin-top:22px" }, "Changer mon mot de passe"), pw, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { await API.changeMyPassword(pw.value); pw.value = ""; toast("Mot de passe modifié"); } catch (e) { toast(e.message); } } }, "Modifier")),
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Notifications"), h("p", { class: "muted" }, pushState() === "granted" ? "✓ Activées sur cet appareil." : "Sois prévenu des nouvelles leçons, des messages et des réponses."), h("a", { class: "btn ghost sm", href: "#/notifications" }, ic("bell"), "Gérer mes notifications")),
       h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "L'application"),
         standalone() ? h("p", { class: "muted" }, "✓ L'application est installée sur cet appareil.") : [h("p", { class: "muted" }, "Installe l'application sur ton téléphone : elle s'ouvre en plein écran depuis ton écran d'accueil, comme WhatsApp."), h("button", { class: "btn gold sm", onclick: doInstall }, "📲 Installer l'application")],
         h("button", { class: "btn ghost sm", style: "margin-top:14px;width:100%", onclick: logout }, ic("out"), "Se déconnecter")),
@@ -650,6 +1038,11 @@
       if (!S.me) return viewLogin();
       const p = (location.hash.replace(/^#\/?/, "") || "").split("/");
       document.querySelectorAll(".save").forEach(x => x.remove());
+      if (S.poll) { clearInterval(S.poll); S.poll = null; }
+      if (S.vv) { S.vv(); S.vv = null; }
+      document.body.classList.remove("is-room");
+      if (p[0] === "notifications") return viewNotifications();
+      if (p[0] === "communaute") return p[1] ? viewRoom(decodeURIComponent(p[1])) : viewCommunity();
       if (p[0] === "lecon") return viewLesson(p[1], p[2]);
       if (p[0] === "revue" && isStaff()) return viewLesson(p[2], p[3], p[1]);
       if (p[0] === "questions") return viewStudentQuestions();
@@ -663,5 +1056,8 @@
     } catch (e) { console.error(e); fill(app, h("div", { class: "wrap page" }, h("div", { class: "err" }, "Une erreur est survenue : " + e.message), h("button", { class: "btn", style: "margin-top:12px", onclick: async () => { await API.signOut(); S.me = null; route(); } }, "Se reconnecter"))); }
   }
   addEventListener("hashchange", route);
-  route();
+  route().then(() => { try { if (S.me && pushState() === "granted") subscribePush(true).catch(() => { }); } catch (e) { } });
+  setInterval(() => { if (!document.hidden) refreshCBadge(); }, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCBadge(); });
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "open" && e.data.url) location.hash = e.data.url; });
 })();

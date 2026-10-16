@@ -112,6 +112,36 @@
         db.messages.push(m); save(); return m;
       },
       async markRead(ids, asStaff) { db.messages.forEach(m => { if (ids.includes(m.id)) m[asStaff ? "read_by_staff" : "read_by_student"] = true; }); save(); },
+      // communauté (démo : tout reste dans ce navigateur)
+      ...(function () {
+        const C = () => { db.cposts = db.cposts || []; db.creacts = db.creacts || []; db.creads = db.creads || {}; db.crev = db.crev || 0; return db; };
+        const canRoom = (room) => (room.startsWith("dm:") ? room.split(":").includes(me.id) : false) || room === "general" || me.role !== "student" || db.unlocks.some(u => u.lesson === room && (u.student_id === me.id || (u.class_id && u.class_id === me.class_id)));
+        const nm = (id) => { const u = db.users.find(x => x.id === id); return u ? u.full_name || u.username : "Ancien membre"; };
+        const pubP = (p) => { const u = db.users.find(x => x.id === p.author_id) || {}; const rp = p.reply_to && db.cposts.find(x => x.id === p.reply_to);
+          const rs = {}; db.creacts.filter(r => r.post_id === p.id).forEach(r => { rs[r.emoji] = rs[r.emoji] || { emoji: r.emoji, n: 0, mine: false }; rs[r.emoji].n++; if (r.user_id === me.id) rs[r.emoji].mine = true; });
+          return { id: p.id, room: p.room, author: { id: p.author_id, name: nm(p.author_id), role: u.role || "student" }, body: p.deleted ? "" : p.body, image: p.deleted ? null : p.image, deleted: !!p.deleted, fwd: p.deleted ? null : p.fwd, mentions: p.mentions || [], created_at: p.created_at, rev: p.rev,
+            reply: rp ? { id: rp.id, room: rp.room, name: nm(rp.author_id), body: rp.deleted ? "Message supprimé" : rp.body.slice(0, 140), image: !!rp.image && !rp.deleted } : null, reactions: Object.values(rs) }; };
+        return {
+          async communityRooms() { C(); const rooms = {}; db.cposts.filter(p => !p.deleted && canRoom(p.room)).forEach(p => { const r = rooms[p.room] = rooms[p.room] || { room: p.room, count: 0, unread: 0, peer: p.room.startsWith("dm:") ? (() => { const id = p.room.split(":").slice(1).find(x => x !== me.id); const u = db.users.find(x => x.id === id) || {}; return { id, name: u.full_name || u.username, role: u.role }; })() : null }; r.count++; r.last = { name: nm(p.author_id), mine: p.author_id === me.id, body: p.body.slice(0, 90), image: !!p.image, created_at: p.created_at }; if (p.author_id !== me.id && p.id > (db.creads[me.id + "|" + p.room] || 0)) r.unread++; });
+            const list = Object.values(rooms); return { rooms: list, unread: list.reduce((a, r) => a + r.unread, 0) }; },
+          async communityPosts(room, o) { C(); need(canRoom(room)); const ps = db.cposts.filter(p => p.room === room); const rev = ps.reduce((a, p) => Math.max(a, p.rev), 0);
+            if (o && o.since != null) return { posts: ps.filter(p => p.rev > o.since).map(pubP), rev };
+            const older = o && o.before ? ps.filter(p => p.id < o.before) : ps; return { posts: older.slice(-50).map(pubP), more: older.length > 50, rev }; },
+          async communityPost(room, o) { C(); need(canRoom(room)); let body = (o.body || "").trim(), image = o.image || null, fwd = null;
+            if (o.forward_of) { const src = db.cposts.find(p => p.id === o.forward_of); need(src); body = src.body; image = src.image; fwd = src.fwd || nm(src.author_id); }
+            if (!body && !image) throw new Error("Message vide");
+            const p = { id: (db.cposts.reduce((a, x) => Math.max(a, x.id), 0) + 1), room, author_id: me.id, body, image, reply_to: o.reply_to || null, fwd, mentions: (o.mentions || []).map(id => ({ id, name: nm(id) })), rev: ++db.crev, created_at: now() };
+            db.cposts.push(p); db.creads[me.id + "|" + room] = p.id; save(); return pubP(p); },
+          async communityReact(id, emoji) { C(); const i = db.creacts.findIndex(r => r.post_id === id && r.user_id === me.id && r.emoji === emoji); if (i >= 0) db.creacts.splice(i, 1); else db.creacts.push({ post_id: id, user_id: me.id, emoji }); const p = db.cposts.find(x => x.id === id); p.rev = ++db.crev; save(); return pubP(p); },
+          async communityDelete(id) { C(); const p = db.cposts.find(x => x.id === id); need(p && (p.author_id === me.id || me.role !== "student")); p.deleted = true; p.rev = ++db.crev; save(); },
+          async communityRead(room, last) { C(); db.creads[me.id + "|" + room] = Math.max(db.creads[me.id + "|" + room] || 0, last); save(); },
+          async communityUpload(dataUrl) { return { url: dataUrl }; },
+          async notifications() { return { items: [], unread: 0 }; },
+          async communityMembers() { return db.users.filter(u => u.id !== me.id && u.active).map(u => ({ id: u.id, name: u.full_name || u.username, username: u.username, role: u.role, class_name: (db.classes.find(c => c.id === u.class_id) || {}).name || null })); },
+          async communityReactions(id) { C(); const by = {}; db.creacts.filter(r => r.post_id === id).forEach(r => { (by[r.emoji] = by[r.emoji] || []).push({ id: r.user_id, name: r.user_id === me.id ? "Moi" : nm(r.user_id) }); }); return Object.entries(by).map(([emoji, users]) => ({ emoji, users })); },
+          async notifRead() { return { unread: 0 }; },
+        };
+      })(),
     };
   }
 
@@ -155,6 +185,21 @@
       async listQuiz(a) { return a.length ? call("GET", "/api/quiz?ids=" + ids(a)) : []; },
       async listMessages(a) { return a.length ? call("GET", "/api/messages?ids=" + ids(a)) : []; },
       async postMessage(sid, lesson, item_key, body) { return call("POST", "/api/messages", { student_id: sid, lesson, item_key, body }); },
+      async notifications() { return call("GET", "/api/notifications"); },
+      async notifRead(o) { return call("POST", "/api/notifications/read", o); },
+      async pushKey() { return (await call("GET", "/api/push/key")).key; },
+      async pushSubscribe(sub) { return call("POST", "/api/push/subscribe", sub); },
+      async pushUnsubscribe(endpoint) { return call("POST", "/api/push/unsubscribe", { endpoint }); },
+      async pushTest() { return call("POST", "/api/push/test"); },
+      async communityRooms() { return call("GET", "/api/community/rooms"); },
+      async communityMembers() { return call("GET", "/api/community/members"); },
+      async communityReactions(id) { return call("GET", "/api/community/posts/" + id + "/reactions"); },
+      async communityPosts(room, o) { const q = o && o.since != null ? "?since=" + o.since : o && o.before ? "?before=" + o.before : ""; return call("GET", "/api/community/rooms/" + room + "/posts" + q); },
+      async communityPost(room, o) { return call("POST", "/api/community/rooms/" + room + "/posts", o); },
+      async communityReact(id, emoji) { return call("POST", "/api/community/posts/" + id + "/react", { emoji }); },
+      async communityDelete(id) { return call("DELETE", "/api/community/posts/" + id); },
+      async communityRead(room, last_id) { return call("POST", "/api/community/rooms/" + room + "/read", { last_id }); },
+      async communityUpload(data) { return call("POST", "/api/community/upload", { data }); },
       async markRead(a, asStaff) { if (a.length) await call("POST", "/api/messages/read", { ids: a, staff: !!asStaff }); },
     };
   }
