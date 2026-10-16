@@ -20,7 +20,7 @@
       else if (k in el && typeof v !== "string") el[k] = v;
       else el.setAttribute(k, v === true ? "" : v);
     }
-    const add = (c) => { if (c == null || c === false) return; if (Array.isArray(c)) c.forEach(add); else el.append(c.nodeType ? c : document.createTextNode(String(c))); };
+    const add = (c) => { if (c == null || c === false) return; if (Array.isArray(c)) c.forEach(add); else if (c.nodeType) el.append(c); else iconize(el, String(c)); };
     kids.forEach(add);
     return el;
   }
@@ -42,9 +42,68 @@
   IC.chev = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
   IC.people = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M17 9a6 6 0 0 1-8.7 5.4L4 16l1.3-3.6A6 6 0 1 1 17 9z"/><path d="M20.5 20 19.3 16.9A5.5 5.5 0 0 0 17 8.8M9.5 15.6A5.5 5.5 0 0 0 17.7 19l2.8 1"/></svg>';
   IC.bell = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
+  IC.cal = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
   IC.cam = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>';
-  const ic = (n) => h("span", { html: IC[n], style: "display:inline-flex" });
+  const ic = (n) => h("span", { html: IC[n] || "", class: "ico" });
+  // Icônes vectorielles (style iOS / WhatsApp) à la place des émojis dans l'interface.
+  // Le texte écrit par les membres (messages, réactions…) passe par U() et n'est jamais transformé.
+  const sv = (d, extra) => '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' + (extra || "") + '>' + d + '</svg>';
+  const V = {
+    check: sv('<path d="M5 12.5l4.5 4.5L19 7.5"/>'), x: sv('<path d="M6 6l12 12M18 6L6 18"/>'),
+    lock: sv('<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>'), unlock: sv('<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.7"/>'),
+    cap: sv('<path d="M2 9.5 12 5l10 4.5-10 4.5z"/><path d="M6 11.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5M22 9.5v5"/>'),
+    bell: sv('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'), belloff: sv('<path d="M8.7 3.6A6 6 0 0 1 18 8c0 3 .5 5 1.2 6.5M17 17H3s3-2 3-9c0-.6.1-1.2.3-1.8M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18"/>'),
+    book: sv('<path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM20 19v3H6"/>'), camera: sv('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>'),
+    calendar: sv('<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>'), pencil: sv('<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/><path d="M14.5 5.5l3 3"/>'),
+    star: sv('<path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z"/>'), video: sv('<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5 21.5 7v10l-6-3.5"/>'),
+    sparkle: sv('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>'), pin: sv('<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>'),
+    chat: sv('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/>'), people: sv('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>'),
+    mail: sv('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 6.5 12 13l8.5-6.5"/>'), target: sv('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>'),
+    trophy: sv('<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5v1.5A3.5 3.5 0 0 0 8 11M16 6h3.5v1.5A3.5 3.5 0 0 1 16 11M12 13v4M8.5 20h7M10 17h4v3h-4z"/>'),
+    heart: sv('<path d="M12 20.5S3.5 15.4 3.5 9.3A4.6 4.6 0 0 1 12 6.7a4.6 4.6 0 0 1 8.5 2.6c0 6.1-8.5 11.2-8.5 11.2z"/>'), eye: sv('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    bulb: sv('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.4 1.1 2.2h5c0-.8.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/>'), cross: sv('<path d="M12 3v18M7 8h10"/>'),
+    flame: sv('<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.6 3-5.6 3.8-9.3 2.7 1.6 4.2 4 4.2 6.3 1-.6 1.8-1.7 2-3 1.9 1.6 3 3.7 3 6 0 3.6-2.6 6.2-6.5 6.2z"/>'),
+    church: sv('<path d="M12 2v5M10 4h4M5 21V12l7-5 7 5v9M3 21h18M10 21v-4a2 2 0 0 1 4 0v4"/>'), phone: sv('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>'),
+    copy: sv('<rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3h-8A2.5 2.5 0 0 0 3 5.5v8A2.5 2.5 0 0 0 5.5 16H8"/>'), globe: sv('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
+    reply: sv('<path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 6 6v1"/>'), forward: sv('<path d="M15 7l5 5-5 5"/><path d="M20 12H10a6 6 0 0 0-6 6v1"/>'),
+    crown: sv('<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>'), key: sv('<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>'),
+    clock: sv('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'), megaphone: sv('<path d="M3 10v4a1 1 0 0 0 1 1h3l8 5V4L7 9H4a1 1 0 0 0-1 1zM19 9a4 4 0 0 1 0 6"/>'),
+    inbox: sv('<path d="M3 13h5l1.5 3h5L16 13h5M5.5 5h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>'), scroll: sv('<path d="M8 3h11v15a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-1h11v1a3 3 0 0 0 3 3M8 3a3 3 0 0 0-3 3v11M11 8h5M11 12h5"/>'),
+    ban: sv('<circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/>'), image: sv('<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>'),
+    trash: sv('<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v6M14 11v6"/>'), chart: sv('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    warning: sv('<path d="M12 3.5 22 20H2z"/><path d="M12 10v4.5M12 17.5v.1"/>'), save: sv('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'), user: sv('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+    sun: sv('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'), moon: sv('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
+    dot: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>', plus: sv('<path d="M12 5v14M5 12h14"/>'), diamond: sv('<path d="M12 3l8 9-8 9-8-9z"/>'),
+    hands: sv('<path d="M12 21V11.5L9 6.5a1.6 1.6 0 0 1 2.8-1.6L12 5.3l.2-.4A1.6 1.6 0 0 1 15 6.5l-3 5M8 21l-3-4.5V10a1.5 1.5 0 0 1 3 0v3M16 21l3-4.5V10a1.5 1.5 0 0 0-3 0v3"/>'),
+  };
+  const EMO = { "✓": "check", "✅": "check", "✔": "check", "✗": "x", "❌": "x", "🔓": "unlock", "🔒": "lock", "🎓": "cap", "🔔": "bell", "📵": "belloff", "📖": "book", "📷": "camera", "📅": "calendar", "📝": "pencil", "✍": "pencil",
+    "⭐": "star", "★": "star", "🎥": "video", "✦": "sparkle", "✨": "sparkle", "📌": "pin", "💬": "chat", "👥": "people", "✉": "mail", "📩": "inbox", "🎯": "target", "🏆": "trophy", "🙏": "hands", "👁": "eye", "👀": "eye",
+    "💡": "bulb", "✝": "cross", "🔥": "flame", "⛪": "church", "📲": "phone", "📱": "phone", "📋": "copy", "🌍": "globe", "↩": "reply", "↪": "forward", "❤": "heart", "♥": "heart", "♛": "crown", "⚿": "key",
+    "⏳": "clock", "⏰": "clock", "📣": "megaphone", "📜": "scroll", "🚫": "ban", "🖼": "image", "🗑": "trash", "📊": "chart", "⚠": "warning", "💾": "save", "👤": "user", "☀": "sun", "🌙": "moon", "🔴": "dot", "◆": "diamond",
+    "🎉": "", "💪": "", "😉": "", "👋": "", "👉": "", "😊": "" };
+  const EMO_RE = new RegExp("(" + Object.keys(EMO).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")[\uFE0F\u200D]?\s?", "gu");
+  const U = (t) => document.createTextNode(t == null ? "" : String(t)); // texte des membres : jamais transformé
+  function iconize(el, str) {
+    if (!EMO_RE.test(str)) { el.append(document.createTextNode(str)); return; }
+    EMO_RE.lastIndex = 0;
+    const plain = el.tagName === "OPTION" || el.tagName === "OPTGROUP" || el.tagName === "TEXTAREA";
+    let last = 0, m;
+    while ((m = EMO_RE.exec(str))) {
+      if (m.index > last) el.append(document.createTextNode(str.slice(last, m.index)));
+      const name = EMO[m[1]];
+      if (!plain && name) { const s = document.createElement("span"); s.className = "ico"; s.innerHTML = V[name]; el.append(s); }
+      else if (m[0].endsWith(" ") && m.index > 0 && last < m.index) el.append(document.createTextNode(" "));
+      last = m.index + m[0].length;
+    }
+    if (last < str.length) el.append(document.createTextNode(str.slice(last)));
+    EMO_RE.lastIndex = 0;
+  }
   const toast = (t) => { const el = h("div", { class: "toast" }, t); document.body.append(el); setTimeout(() => el.remove(), 2600); };
+  const getTheme = () => { try { return localStorage.getItem("dac-theme") || "auto"; } catch (e) { return "auto"; } };
+  function setTheme(t) { try { localStorage.setItem("dac-theme", t); } catch (e) { } applyTheme(); }
+  function applyTheme() { const t = getTheme(), dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light"; const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = dark ? "#120D19" : "#2E1A47"; }
+  applyTheme(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
   const fmt = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
   const initials = (n) => (n || "?").split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase();
   const isStaff = () => S.me && S.me.role !== "student";
@@ -102,10 +161,11 @@
     await API.signOut(); S.me = null; go("#/"); route(); };
   function topbar(active, unread) {
     const nav = [];
-    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours", "Parcours"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/questions", "chat", "Mes questions", "Mentor"]);
-    else { nav.push(["#/mentor", "grid", "Tableau de bord", "Accueil"], ["#/lecons", "book", "Leçons", "Leçons"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/inbox", "chat", "Questions", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration", "Admin"]); }
+    if (S.me.role === "student") nav.push(["#/", "home", "Mon parcours", "Parcours"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/agenda", "cal", "Agenda", "Agenda"], ["#/questions", "chat", "Mes questions", "Mentor"]);
+    else { nav.push(["#/mentor", "grid", "Tableau de bord", "Accueil"], ["#/lecons", "book", "Leçons", "Leçons"], ["#/communaute", "people", "Communauté", "Communauté"], ["#/agenda", "cal", "Agenda", "Agenda"], ["#/inbox", "chat", "Questions", "Questions"]); if (S.me.role === "superadmin") nav.push(["#/admin", "users", "Administration", "Admin"]); }
     nav.push(["#/profil", "user", "Profil", "Profil"]);
-    const tabs = nav.length > 5 ? nav.filter(x => x[0] !== "#/profil") : nav;
+    let tabs = nav.length > 5 ? nav.filter(x => x[0] !== "#/profil") : nav;
+    const calTop = tabs.length > 5; if (calTop) tabs = tabs.filter(x => x[0] !== "#/agenda");
     const deep = S.deep; // écran secondaire : flèche retour (téléphone)
     return [
       API.mode === "demo" ? h("div", { class: "demo" }, "Mode démonstration : les données restent dans ce navigateur.") : null,
@@ -117,6 +177,7 @@
           h("a", { href: "#/notifications", class: active === "#/notifications" ? "on" : null, title: "Notifications" }, ic("bell"), h("i", { class: "nbadge" + (S.nun ? "" : " hide") }, S.nun > 9 ? "9+" : S.nun || "")),
           h("button", { title: "Déconnexion", onclick: logout }, ic("out"))),
         deep && deep.action ? h("a", { class: "iconbtn mobile", href: deep.action.href, title: deep.action.title, "aria-label": deep.action.title }, ic(deep.action.icon)) : null,
+        !deep && calTop ? h("a", { class: "bellbtn calbtn mobile", href: "#/agenda", "aria-label": "Agenda" }, ic("cal")) : null,
         !deep ? h("a", { class: "bellbtn mobile", href: "#/notifications", "aria-label": "Notifications" }, ic("bell"), h("i", { class: "nbadge" + (S.nun ? "" : " hide") }, S.nun > 9 ? "9+" : S.nun || "")) : null,
         !deep ? h("a", { class: "meavatar mobile", href: "#/profil", "aria-label": "Mon profil" }, initials(S.me.full_name || S.me.username)) : null)),
       deep ? null : h("nav", { class: "tabbar" }, tabs.map(([href, i, t, short]) => h("a", { href, class: active === href ? "on" : null }, h("span", { class: "ti" }, ic(i), (i === "chat" && unread) ? h("i", { class: "badge" }, unread > 9 ? "9+" : unread) : null, i === "people" ? h("i", { class: "badge cbadge" + (S.cun ? "" : " hide") }, S.cun > 9 ? "9+" : S.cun || "") : null), h("span", { class: "tl" }, short)))) ];
@@ -221,18 +282,21 @@
     const current = LESSONS.find(l => ["op", "ip"].includes(st[l.n])) || LESSONS.find(l => st[l.n] !== "lk");
     const C = 2 * Math.PI * 52;
     const passes = LESSONS.filter(l => { const b = bestQuiz(quiz, S.me.id, l.n); return b && b.score / b.total >= PASS; }).length;
+    const [agCard, pdCard, certs] = await Promise.all([agendaCard(), pendingCard(), API.certs(S.me.id).catch(() => [])]);
     shell("#/", unread, h("div", { class: "wrap page" }, installCard(), pushCard(),
       h("div", { class: "welcome" },
         h("div", { class: "ring", html: `<svg width="120" height="120" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,.15)" stroke-width="12" fill="none"/><circle cx="60" cy="60" r="52" stroke="#C9A227" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/></svg><b>${pct}%<small>CAHIERS ENVOYÉS</small></b>` }),
         h("div", null, h("div", { class: "k" }, "BIENVENUE"), h("h1", null, "Shalom, " + (S.me.full_name || S.me.username).split(" ")[0] + " !"),
           current ? [h("p", null, "Ta leçon du moment : ", h("b", { style: "color:#fff" }, current.n + " · " + current.t)), h("a", { class: "btn gold", style: "margin-top:14px", href: "#/lecon/" + current.n }, "Continuer ma leçon →")] : h("p", null, "Ton mentor va bientôt débloquer ta première leçon. Reste connecté !"))),
+      pdCard, agCard,
       h("div", { class: "stats" },
         h("div", { class: "stat" }, h("b", null, opened), h("span", null, "Leçons ouvertes")),
         h("div", { class: "stat" }, h("b", null, done), h("span", null, "Leçons validées ⭐")),
         h("div", { class: "stat" }, h("b", null, passes), h("span", null, "Tests réussis")),
         h("div", { class: "stat" }, h("b", null, unread), h("span", null, "Réponses non lues"))),
       PHASES.map(p => { const ls = LESSONS.filter(l => l.ph === p.n);
-        return h("section", { class: "phase" }, h("h2", null, "Phase " + p.n + " · " + p.t, h("small", null, ls.filter(l => st[l.n] === "vd").length + " / " + ls.length)),
+        const cs = certs.find(c => c.phase === p.n);
+        return h("section", { class: "phase" }, h("h2", null, "Phase " + p.n + " · " + p.t, h("small", null, ls.filter(l => st[l.n] === "vd").length + " / " + ls.length)), cs && (cs.eligible || cs.validated) ? certBlock(cs, S.me.id) : null,
           h("div", { class: "grid" }, ls.map(l => lessonCard(l, st[l.n], bestQuiz(quiz, S.me.id, l.n))))); })));
   }
   function lessonCard(l, s, q) {
@@ -312,7 +376,7 @@
       h("p", { class: "muted", style: "font-size:12px;margin-top:20px" }, "Les encadrés « Le Royaume » résument l'enseignement du Dr Myles Munroe (résumés, non des citations). Versets : version Darby."),
       h("div", { class: "row noprint", style: "margin-top:20px" }, h("a", { class: "btn gold", href: "#/lecon/" + l.n + "/cahier" }, "J'ai lu, je remplis mon cahier →")));
   }
-  function tableOf(t) { return labelize(h("table", { class: "t" }, h("tr", null, t.head.map(c => h("th", null, c))), t.rows.map(r => h("tr", null, r.map((c, i) => h("td", { style: i ? null : "font-weight:700;color:var(--pur)" }, c)))))); }
+  function tableOf(t) { return labelize(h("table", { class: "t" }, h("tr", null, t.head.map(c => h("th", null, c))), t.rows.map(r => h("tr", null, r.map((c, i) => h("td", { style: i ? null : "font-weight:700;color:var(--tp)" }, c)))))); }
 
   // ---------- cahier ----------
   function renderCahier(el, l, student, ans, rev, msgs, review, preview) {
@@ -321,11 +385,11 @@
     const ro = review || preview; // le mentor ne modifie pas les réponses
     const saveEl = h("div", { class: "save" }, "Enregistré ✓"); document.body.querySelectorAll(".save").forEach(x => x.remove()); document.body.append(saveEl);
     let timer = null;
-    const persist = (submitted) => API.saveAnswers(student.id, l.n, data, submitted).then(() => { saveEl.textContent = "Enregistré ✓"; saveEl.classList.add("show"); setTimeout(() => saveEl.classList.remove("show"), 1400); }).catch(e => toast("Erreur d'enregistrement : " + e.message));
+    const persist = (submitted) => API.saveAnswers(student.id, l.n, data, submitted).then(() => { saveEl.textContent = "Enregistré"; saveEl.classList.add("show"); setTimeout(() => saveEl.classList.remove("show"), 1400); }).catch(e => toast("Erreur d'enregistrement : " + e.message));
     const changed = () => { if (ro) return; saveEl.textContent = "Enregistrement…"; saveEl.classList.add("show"); clearTimeout(timer); timer = setTimeout(() => persist(false), 900); };
     const reviewState = JSON.parse(JSON.stringify(items));
     let rvTimer = null;
-    const saveRev = () => { clearTimeout(rvTimer); rvTimer = setTimeout(() => API.saveReview(student.id, l.n, { items: reviewState }).then(() => { saveEl.textContent = "Correction enregistrée ✓"; saveEl.classList.add("show"); setTimeout(() => saveEl.classList.remove("show"), 1400); }), 700); };
+    const saveRev = () => { clearTimeout(rvTimer); rvTimer = setTimeout(() => API.saveReview(student.id, l.n, { items: reviewState }).then(() => { saveEl.textContent = "Correction enregistrée"; saveEl.classList.add("show"); setTimeout(() => saveEl.classList.remove("show"), 1400); }), 700); };
 
     const text = (key, rows, ph) => { const t = h("textarea", { class: "in", rows: rows || 3, placeholder: ph || "Écris ta réponse ici…", disabled: ro }); t.value = data[key] || ""; t.addEventListener("input", () => { data[key] = t.value; changed(); }); return t; };
     function itemFoot(key, title) {
@@ -334,7 +398,7 @@
       const bar = h("div", { class: "bar" }, h("button", { class: "askbtn" + (th.length ? " has" : ""), type: "button", onclick: () => openThread(student, l, key, title, review) }, ic("chat"), th.length ? th.length + " message" + (th.length > 1 ? "s" : "") : (review ? "Écrire à l'élève" : "Poser une question au mentor"), un ? h("i", { class: "u" }) : null));
       const r = items[key];
       const out = [bar];
-      if (!review && r && (r.ok != null || r.comment)) out.push(h("div", { class: "rv " + (r.ok === false ? "no" : "ok") }, h("b", null, r.ok === false ? "✗ À revoir" : "✓ Bien"), r.comment ? " · " + r.comment : ""));
+      if (!review && r && (r.ok != null || r.comment)) out.push(h("div", { class: "rv " + (r.ok === false ? "no" : "ok") }, h("b", null, r.ok === false ? "✗ À revoir" : "✓ Bien"), r.comment ? [" · ", U(r.comment)] : ""));
       if (review) {
         const st = reviewState[key] = reviewState[key] || {};
         const okb = h("button", { class: "okb" + (st.ok === true ? " on" : ""), type: "button" }, "✓ Bien"), nob = h("button", { class: "nob" + (st.ok === false ? " on" : ""), type: "button" }, "✗ À revoir");
@@ -405,7 +469,7 @@
       add(el, h("div", { class: "sendbox" }, h("div", { style: "flex:1;min-width:220px" }, h("h3", null, sent ? "Cahier envoyé ✓" : "Tu as terminé ?"), h("p", null, sent ? "Ton mentor a reçu ton cahier. Tu peux encore le modifier : il verra la dernière version." : "Envoie ton cahier à ton mentor pour qu'il le corrige, puis passe le test final.")),
         h("button", { class: "btn gold", onclick: async () => { clearTimeout(timer); await persist(true); confetti(); toast("Cahier envoyé à ton mentor 🎉"); go("#/lecon/" + l.n + "/test"); } }, sent ? "Renvoyer la mise à jour" : "Envoyer à mon mentor"),
         rev && rev.validated ? h("span", { class: "chip ok", style: "font-size:14px" }, "⭐ Leçon validée par ton mentor") : null),
-        rev && rev.general ? h("div", { class: "card", style: "margin-top:14px;border-left:6px solid var(--gold)" }, h("b", null, "Mot de ton mentor : "), rev.general) : null);
+        rev && rev.general ? h("div", { class: "card", style: "margin-top:14px;border-left:6px solid var(--gold)" }, h("b", null, "Mot de ton mentor : "), U(rev.general)) : null);
     } else {
       const gen = h("textarea", { class: "in", rows: 3, placeholder: "Un mot d'encouragement ou une remarque générale…" }); gen.value = (rev && rev.general) || "";
       const valid = !!(rev && rev.validated);
@@ -423,7 +487,7 @@
     const users = isStaff() ? await API.listUsers() : [];
     const nameOf = (id) => id === S.me.id ? "Moi" : id === student.id ? (student.full_name || "Élève") : ((users.find(u => u.id === id) || {}).full_name || "Mentor");
     const list = h("div", { class: "msgs" });
-    const draw = (ms) => fill(list, ...(ms.length ? ms.map(m => h("div", { class: "msg" + (m.author_id === S.me.id ? " mine" : "") }, m.body, h("small", null, nameOf(m.author_id) + " · " + fmt(m.created_at)))) : [h("div", { class: "empty" }, asStaff ? "Aucun message. Écrivez un mot à l'élève sur cette question." : "Pose ta question : ton mentor te répondra ici.")]));
+    const draw = (ms) => fill(list, ...(ms.length ? ms.map(m => h("div", { class: "msg" + (m.author_id === S.me.id ? " mine" : "") }, U(m.body), h("small", null, nameOf(m.author_id) + " · " + fmt(m.created_at)))) : [h("div", { class: "empty" }, asStaff ? "Aucun message. Écrivez un mot à l'élève sur cette question." : "Pose ta question : ton mentor te répondra ici.")]));
     draw(all);
     const ta = h("textarea", { class: "in", placeholder: "Écris ton message…", rows: 1 });
     ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; });
@@ -480,7 +544,7 @@
   function renderMyQuestions(el, l, msgs) {
     const keys = [...new Set(msgs.map(m => m.item_key))];
     add(el, h("div", { style: "margin-top:14px" }, keys.length ? keys.map(k => { const th = msgs.filter(m => m.item_key === k), last = th[th.length - 1], un = th.filter(m => !m.read_by_student).length;
-      return h("div", { class: "inbox" }, h("a", { href: "javascript:void 0", onclick: () => openThread(S.me, l, k, itemTitle(l, k), false) }, h("div", { class: "avatar" }, k), h("div", { style: "flex:1" }, h("b", null, itemTitle(l, k)), h("div", { class: "muted", style: "font-size:14px" }, last.body.slice(0, 90))), un ? h("span", { class: "chip g" }, un + " nouveau" + (un > 1 ? "x" : "")) : null)); })
+      return h("div", { class: "inbox" }, h("a", { href: "javascript:void 0", onclick: () => openThread(S.me, l, k, itemTitle(l, k), false) }, h("div", { class: "avatar" }, k), h("div", { style: "flex:1" }, h("b", null, itemTitle(l, k)), h("div", { class: "muted", style: "font-size:14px" }, U(last.body.slice(0, 90)))), un ? h("span", { class: "chip g" }, un + " nouveau" + (un > 1 ? "x" : "")) : null)); })
       : h("div", { class: "empty" }, "Tu n'as pas encore posé de question sur cette leçon.", h("br"), "Dans « Mon cahier », clique sur « Poser une question au mentor » sous n'importe quelle question.")));
   }
   function itemTitle(l, k) {
@@ -500,8 +564,213 @@
     const arr = Object.entries(groups).sort((a, b) => b[1][b[1].length - 1].created_at.localeCompare(a[1][a[1].length - 1].created_at));
     shell("#/questions", unread, h("div", { class: "wrap page" }, h("h1", null, "Mes questions"), h("p", { class: "muted" }, "Toutes tes conversations avec ton mentor, question par question."),
       arr.length ? h("div", { class: "inbox" }, arr.map(([k, th]) => { const [n, key] = k.split("|"), l = L[n], last = th[th.length - 1], un = th.filter(m => !m.read_by_student).length;
-        return h("a", { href: "javascript:void 0", onclick: () => openThread(S.me, l, key, itemTitle(l, key), false) }, h("div", { class: "avatar" }, n), h("div", { style: "flex:1;min-width:0" }, h("b", null, "Leçon " + n + " · " + itemTitle(l, key).slice(0, 80)), h("div", { class: "muted", style: "font-size:14px" }, (last.author_id === S.me.id ? "Moi : " : "Mentor : ") + last.body.slice(0, 90))), un ? h("span", { class: "chip g" }, "Nouvelle réponse") : null); }))
+        return h("a", { href: "javascript:void 0", onclick: () => openThread(S.me, l, key, itemTitle(l, key), false) }, h("div", { class: "avatar" }, n), h("div", { style: "flex:1;min-width:0" }, h("b", null, "Leçon " + n + " · " + itemTitle(l, key).slice(0, 80)), h("div", { class: "muted", style: "font-size:14px" }, (last.author_id === S.me.id ? "Moi : " : "Mentor : ") + U(last.body.slice(0, 90)))), un ? h("span", { class: "chip g" }, "Nouvelle réponse") : null); }))
         : h("div", { class: "empty card" }, "Aucune question pour l'instant. Pendant que tu remplis ton cahier, clique sur « Poser une question au mentor » sous une question.")));
+  }
+
+  // =============================== STATISTIQUES ===============================
+  const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const monthLabel = (m, short) => { const [y, mo] = m.split("-").map(Number); return short ? ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."][mo - 1] : MOIS[mo - 1] + " " + y; };
+  const shiftMonth = (m, d) => { const [y, mo] = m.split("-").map(Number); const t = new Date(Date.UTC(y, mo - 1 + d, 1)); return t.toISOString().slice(0, 7); };
+  function barChart(title, unit, data, key, sel, fmtv) {
+    const vals = data.map(d => d[key] == null ? 0 : d[key]), max = Math.max(1, ...vals);
+    return h("div", { class: "chart" }, h("div", { class: "ch-t" }, title),
+      h("div", { class: "bars", role: "img", "aria-label": title + " : " + data.map(d => monthLabel(d.month) + " " + (d[key] == null ? "aucune donnée" : fmtv(d[key]))).join(", ") },
+        data.map((d, i) => { const v = d[key], on = d.month === sel;
+          return h("div", { class: "bcolw" + (on ? " on" : ""), tabindex: 0 },
+            h("div", { class: "tip" }, monthLabel(d.month), h("b", null, v == null ? "—" : fmtv(v) + (unit ? " " + unit : ""))),
+            h("span", { class: "bv" }, on || vals[i] === max && v ? (v == null ? "—" : fmtv(v)) : ""),
+            h("div", { class: "bar", style: "height:" + (v ? Math.max(4, Math.round(100 * vals[i] / max)) : 0) + "%" }),
+            h("small", null, monthLabel(d.month, true))); })));
+  }
+  async function viewStats(month, classId) {
+    if (!isStaff()) return go("#/");
+    month = month || new Date().toISOString().slice(0, 7);
+    const [st, classes, unread] = await Promise.all([API.stats(month, classId), API.listClasses(), unreadCount()]);
+    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const goTo = (m, c) => go("#/stats/" + m + (c ? "/" + c : ""));
+    const cls = h("select", { class: "in" }, h("option", { value: "" }, "Toutes " + (S.me.role === "superadmin" ? "les classes" : "mes classes")), mine.map(c => h("option", { value: c.id }, c.name))); cls.value = classId || ""; cls.onchange = () => goTo(month, cls.value);
+    const pct = (v) => v == null ? "—" : v + " %";
+    const tile = (v, lab, sub, tone) => h("div", { class: "kpi" + (tone ? " " + tone : "") }, h("b", null, v), h("span", null, lab), sub ? h("small", null, sub) : null);
+    let sortK = "sent", rows = st.per.slice();
+    const tbl = h("div");
+    const drawT = () => { rows.sort((a, b) => (b[sortK] || 0) - (a[sortK] || 0) || a.name.localeCompare(b.name));
+      fill(tbl, rows.length ? labelize(h("table", { class: "t" }, h("tr", null, [["name", "Élève"], ["class_name", "Classe"], ["active_days", "Jours actifs"], ["sent", "Cahiers envoyés"], ["validated", "Leçons validées"], ["tests", "Tests"], ["test_avg", "Moyenne"]].map(([k, t]) => h("th", { class: "sortable" + (sortK === k ? " on" : ""), onclick: () => { if (k !== "name" && k !== "class_name") { sortK = k; drawT(); } } }, t))),
+        rows.map(r => h("tr", null, h("td", null, h("a", { href: "#/eleve/" + r.id, style: "font-weight:700;text-decoration:none" }, r.name)), h("td", null, r.class_name || "—"), h("td", null, r.active_days), h("td", null, r.sent), h("td", null, r.validated), h("td", null, r.tests), h("td", null, pct(r.test_avg)))))) : h("p", { class: "muted" }, "Aucun élève.")); };
+    drawT();
+    const csv = () => { const lines = [["Élève", "Classe", "Jours actifs", "Cahiers envoyés", "Leçons validées", "Tests", "Moyenne (%)"], ...st.per.map(r => [r.name, r.class_name, r.active_days, r.sent, r.validated, r.tests, r.test_avg == null ? "" : r.test_avg])];
+      const a = h("a", { href: URL.createObjectURL(new Blob(["﻿" + lines.map(l => l.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(";")).join("\r\n")], { type: "text/csv" })), download: "statistiques-" + month + ".csv" }); document.body.append(a); a.click(); setTimeout(() => a.remove(), 500); };
+    const cur = new Date().toISOString().slice(0, 7);
+    shell(S.me.role === "superadmin" ? "#/admin" : "#/mentor", unread, h("div", { class: "wrap page" },
+      h("div", { class: "row", style: "align-items:flex-end" }, h("h1", { style: "margin:0;flex:1" }, "Statistiques"), h("button", { class: "btn ghost sm", onclick: csv }, ic("dl"), "Exporter (Excel)")),
+      h("div", { class: "statbar" }, h("div", { class: "mnav" }, h("button", { class: "btn ghost sm", "aria-label": "Mois précédent", onclick: () => goTo(shiftMonth(month, -1), classId) }, "‹"), h("b", null, monthLabel(month)), h("button", { class: "btn ghost sm", "aria-label": "Mois suivant", disabled: month >= cur, onclick: () => goTo(shiftMonth(month, 1), classId) }, "›")), cls),
+      h("div", { class: "kpis" },
+        tile(st.active + " / " + st.students, "Élèves actifs", st.students ? Math.round(100 * st.active / st.students) + " % de connectés ce mois" : null, "hero"),
+        tile(st.sent, "Cahiers envoyés", st.senders + " élève" + (st.senders > 1 ? "s" : "")),
+        tile(st.validated, "Leçons validées"),
+        tile(pct(st.test_avg), "Moyenne aux tests", st.tests ? st.tests + " tentative" + (st.tests > 1 ? "s" : "") + " · " + pct(st.test_pass) + " réussies" : "aucun test ce mois"),
+        tile(st.questions, "Questions au mentor"), tile(st.posts, "Messages communauté"), tile(st.new_students, "Nouveaux élèves"), tile(st.certificates, "Certificats délivrés")),
+      h("div", { class: "charts" },
+        barChart("Élèves actifs par mois", "élèves", st.trend, "active", month, (v) => v),
+        barChart("Cahiers envoyés par mois", "cahiers", st.trend, "sent", month, (v) => v),
+        barChart("Moyenne aux tests", "", st.trend, "test_avg", month, (v) => v + " %")),
+      st.classes.length > 1 || !classId ? h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Par classe · " + monthLabel(month)), labelize(h("table", { class: "t" }, h("tr", null, ["Classe", "Élèves", "Actifs", "Cahiers envoyés", "Leçons validées", "Moyenne tests"].map(t => h("th", null, t))),
+        st.classes.map(c => h("tr", null, h("td", null, h("a", { href: "#/stats/" + month + "/" + c.id, style: "font-weight:700;text-decoration:none" }, c.name)), h("td", null, c.students), h("td", null, c.active), h("td", null, c.sent), h("td", null, c.validated), h("td", null, pct(c.test_avg))))))) : null,
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Par élève · " + monthLabel(month)), h("p", { class: "muted", style: "margin-top:-4px;font-size:13px" }, "Touchez un titre de colonne pour trier."), h("div", { class: "scroll" }, tbl))));
+  }
+
+  // =============================== CERTIFICATS ===============================
+  const certUrl = (sid, phase, dl) => "/api/certificate.pdf?sid=" + sid + "&phase=" + phase + (dl ? "&dl=1" : "");
+  function certBlock(c, sid) {
+    if (c.eligible) return h("div", { class: "certok" }, h("div", { class: "seal" }, "🎓"), h("div", { style: "flex:1;min-width:0" }, h("b", null, "Phase " + c.phase + " achevée !"), h("small", null, "Ton certificat · code " + (c.code || "créé au téléchargement"))),
+      h("a", { class: "btn gold sm", href: certUrl(sid, c.phase, true), download: true }, ic("dl"), "Certificat (PDF)"));
+    return h("div", { class: "certwait" }, h("span", null, "🎓 Certificat de la phase " + c.phase), h("div", { class: "cprog" }, h("i", { style: "width:" + Math.round(100 * c.validated / c.total) + "%" })), h("small", null, c.validated + " / " + c.total + " leçons validées par ton mentor"));
+  }
+  async function viewVerify(code) {
+    let r = null, err = null; try { r = await API.verify(code); } catch (e) { err = e.message; }
+    fill(app, h("div", { class: "verify" }, h("img", { src: "img/logo.png", alt: "The Divine Arsenal Corporation" }),
+      r ? h("div", { class: "card vok" }, h("div", { class: "seal big" }, "✓"), h("h1", null, "Certificat authentique"), h("p", null, "Délivré à ", h("b", null, r.name)), h("p", null, "Phase " + r.phase + " · " + r.title), h("p", { class: "muted" }, "Le " + new Date(r.issued_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) + " · code " + r.code))
+        : h("div", { class: "card vbad" }, h("h1", null, "Certificat introuvable"), h("p", null, err || "Ce code ne correspond à aucun certificat.")),
+      h("p", { class: "muted", style: "margin-top:16px" }, "The Divine Arsenal Corporation · École de disciples"), h("a", { class: "btn ghost sm", href: "#/" }, "Aller à l'application")));
+  }
+
+  // =============================== WHATSAPP ===============================
+  const waNum = (p) => String(p || "").replace(/[^\d]/g, "");
+  const waLink = (phone, text) => "https://wa.me/" + (phone ? waNum(phone) : "") + "?text=" + encodeURIComponent(text);
+  async function viewWhatsApp(classId) {
+    if (!isStaff()) return go("#/");
+    const [classes, unread] = await Promise.all([API.listClasses(), unreadCount()]);
+    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    if (!classId && mine.length) classId = mine[0].id;
+    const d = await API.whatsapp(classId);
+    const c = classes.find(x => x.id === classId);
+    const cls = h("select", { class: "in" }, mine.map(x => h("option", { value: x.id }, x.name))); cls.value = classId || ""; cls.onchange = () => go("#/whatsapp/" + cls.value);
+    const pendingN = d.students.filter(s => s.pending.length).length, me1 = (S.me.full_name || S.me.username);
+    const kind = { cours: "🎓", priere: "🙏", bible: "📖", culte: "⛪", autre: "📌" };
+    const group = ["📖 *École de disciples" + (c ? " · " + c.name : "") + "*", "_The Divine Arsenal Corporation_", "",
+      d.recent.length ? ["🔓 *Ouvert cette semaine*", ...d.recent.map(r => "• Leçon " + r.lesson + " · " + r.title), ""] : null,
+      d.events.length ? ["📅 *Prochains rendez-vous*", ...d.events.map(e => "• " + e.when.charAt(0).toUpperCase() + e.when.slice(1) + " · " + (kind[e.kind] || "📌") + " " + e.title + (e.link ? "\n   🎥 " + e.link : "")), ""] : null,
+      pendingN ? ["📝 *Cahiers* : " + pendingN + " disciple" + (pendingN > 1 ? "s ont" : " a") + " encore un cahier à terminer. Courage, une question à la fois ! 💪", ""] : ["📝 Tous les cahiers ouverts sont envoyés : bravo à tous ! 🎉", ""],
+      "📲 Ouvre l'application : " + location.origin, "🔔 Installe-la et touche « Activer » pour recevoir les rappels.", "", "Que Dieu vous bénisse ! — " + me1].flat().filter(x => x != null).join("\n");
+    const ta = h("textarea", { class: "in watext", rows: 12 }); ta.value = group;
+    const personal = (s) => { const first = s.name.split(" ")[0]; const ev = d.events[0];
+      return ["Shalom " + first + " ! 👋", "", "Petit point de ton école de disciples :",
+        s.pending.length ? "📝 À terminer : " + s.pending.map(x => "leçon " + x.lesson + (x.pct ? " (" + x.pct + " %)" : " (pas commencée)")).join(", ") : "✅ Tous tes cahiers ouverts sont envoyés, bravo !",
+        ev ? "📅 Prochain rendez-vous : " + ev.when + " · " + ev.title + (ev.link ? "\n🎥 " + ev.link : "") : null, "",
+        "👉 Ouvre l'application : " + location.origin, !s.push ? "💡 Astuce : installe-la sur ton téléphone et touche « Activer » pour recevoir les rappels directement." : null, "", "Que Dieu te bénisse ! — " + me1].filter(x => x != null).join("\n"); };
+    let showAll = false;
+    const list = h("div", { class: "walist" });
+    const drawL = () => { const ss = d.students.filter(s => showAll || !s.push);
+      fill(list, ss.length ? ss.map(s => { const ph = h("input", { class: "in", type: "tel", placeholder: "+234 801 234 5678", value: s.phone });
+        return h("div", { class: "warow" }, h("div", { class: "ravatar dm", style: "background:" + nameColor(s.id) }, initials(s.name)),
+          h("div", { class: "wamid" }, h("b", null, s.name), h("small", null, (s.push ? "🔔 Notifications activées" : "📵 Pas de notifications") + " · " + (s.last_seen ? "vu le " + new Date(s.last_seen).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "jamais connecté") + (s.pending.length ? " · " + s.pending.length + " cahier" + (s.pending.length > 1 ? "s" : "") + " à finir" : "")),
+            s.phone ? null : h("div", { class: "row", style: "margin-top:6px;flex-wrap:nowrap" }, ph, h("button", { class: "btn ghost sm", onclick: async () => { try { const u = await API.updateUser(s.id, { phone: ph.value }); if (!u.phone) throw new Error("Numéro trop court (format international, ex. +234…)"); s.phone = u.phone; toast("Numéro enregistré ✓"); drawL(); } catch (e) { toast(e.message); } } }, "OK"))),
+          s.phone ? h("a", { class: "btn wa sm", href: waLink(s.phone, personal(s)), target: "_blank", rel: "noopener" }, "WhatsApp") : null); })
+        : h("div", { class: "empty" }, "🎉 Tous les élèves de cette classe reçoivent les notifications de l'application.")); };
+    drawL();
+    const toggle = h("button", { class: "tg" }, "Afficher aussi les élèves avec notifications"); toggle.onclick = () => { showAll = !showAll; toggle.classList.toggle("on", showAll); drawL(); };
+    shell(S.me.role === "superadmin" ? "#/admin" : "#/mentor", unread, h("div", { class: "wrap page", style: "max-width:760px" },
+      h("div", { class: "chero wahero" }, h("div", null, h("div", { class: "k" }, "WHATSAPP"), h("h1", null, "Résumé pour WhatsApp"), h("p", null, "Pour les disciples qui n'ont pas installé l'application ou pas activé les notifications : envoyez le point de la semaine dans le groupe de la classe, ou un message personnel."))),
+      mine.length ? h("div", { class: "card", style: "margin-top:16px" }, h("label", { class: "f", style: "margin-top:0" }, "Classe"), cls) : h("div", { class: "note", style: "margin-top:16px" }, "Aucune classe."),
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "1. Message pour le groupe WhatsApp de la classe"), h("p", { class: "muted", style: "margin-top:-4px;font-size:13.5px" }, "Préparé automatiquement (leçons ouvertes, rendez-vous, cahiers). Vous pouvez le modifier."), ta,
+        h("div", { class: "row", style: "margin-top:10px" }, h("a", { class: "btn wa", href: "#", onclick: (e) => { e.preventDefault(); open(waLink("", ta.value), "_blank"); } }, "Envoyer sur WhatsApp"), h("button", { class: "btn ghost", onclick: async () => { try { await navigator.clipboard.writeText(ta.value); toast("Message copié ✓"); } catch (e) { ta.select(); toast("Sélectionné : copiez-le"); } } }, "📋 Copier"))),
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "2. Messages personnels"), h("p", { class: "muted", style: "margin-top:-4px;font-size:13.5px" }, "Élèves sans notifications sur leur téléphone. Le message contient ses cahiers à terminer et le prochain rendez-vous."), toggle, list)));
+  }
+
+  // =============================== AGENDA ===============================
+  const KINDS = { cours: ["🎓", "Cours en ligne"], priere: ["🙏", "Prière"], bible: ["📖", "Étude biblique"], culte: ["⛪", "Culte"], autre: ["📌", "Rendez-vous"] };
+  const kindOf = (k) => KINDS[k] || KINDS.autre;
+  const isLive = (o) => { const t = Date.now(); return t >= Date.parse(o.at) - 15 * 60e3 && t <= Date.parse(o.ends); };
+  const isNow = (o) => { const t = Date.now(); return t >= Date.parse(o.at) && t <= Date.parse(o.ends); };
+  function icsFor(o) {
+    const z = (d) => new Date(d).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const esc = (t) => String(t || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (m) => "\\" + m);
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Divine Arsenal Corporation//Ecole de disciples//FR", "BEGIN:VEVENT", "UID:" + o.id + "@ecole-de-disciples", "DTSTAMP:" + z(Date.now()),
+      "DTSTART:" + z(o.recur === "none" ? o.at : o.starts_at), "DTEND:" + z(Date.parse(o.recur === "none" ? o.at : o.starts_at) + o.duration * 60e3),
+      o.recur !== "none" ? "RRULE:FREQ=" + (o.recur === "daily" ? "DAILY" : "WEEKLY") + (o.until ? ";UNTIL=" + o.until.replace(/-/g, "") + "T235959Z" : "") : null,
+      "SUMMARY:" + esc(o.title), "DESCRIPTION:" + esc(kindOf(o.kind)[1] + (o.description ? "\n" + o.description : "") + (o.link ? "\n" + o.link : "")), o.link ? "URL:" + o.link : null, o.link ? "LOCATION:" + esc(o.link) : null,
+      "BEGIN:VALARM", "TRIGGER:-PT15M", "ACTION:DISPLAY", "DESCRIPTION:" + esc(o.title), "END:VALARM", "END:VEVENT", "END:VCALENDAR"].filter(Boolean);
+    const a = h("a", { href: URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/calendar" })), download: (o.title.replace(/[^\w\- ]+/g, "").trim() || "rendez-vous") + ".ics" });
+    document.body.append(a); a.click(); setTimeout(() => a.remove(), 500);
+  }
+  const hm = (d) => new Date(d).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  function eventItem(o, opts = {}) {
+    const [emo, lab] = kindOf(o.kind), live = isLive(o), now = isNow(o);
+    return h("div", { class: "evt k-" + o.kind + (now ? " now" : "") },
+      h("div", { class: "evt-t" }, h("b", null, hm(o.at)), h("small", null, o.duration >= 60 ? Math.floor(o.duration / 60) + " h" + (o.duration % 60 ? String(o.duration % 60).padStart(2, "0") : "") : o.duration + " min")),
+      h("div", { class: "evt-m" }, h("div", { class: "evt-k" }, emo + " " + lab, now ? h("span", { class: "livechip" }, "● EN DIRECT") : null),
+        h("b", null, U(o.title)), h("small", null, (o.class_name ? "👥 " + o.class_name : "🌍 Toute l'école") + (o.recur === "weekly" ? " · chaque semaine" : o.recur === "daily" ? " · chaque jour" : "")),
+        o.description && !opts.compact ? h("p", null, U(o.description)) : null,
+        h("div", { class: "evt-a" },
+          o.link ? h("a", { class: "btn sm " + (live ? "gold pulse" : "ghost"), href: o.link, target: "_blank", rel: "noopener" }, live ? "🎥 Rejoindre maintenant" : "🎥 Lien de la réunion") : null,
+          h("button", { class: "btn ghost sm", onclick: () => icsFor(o) }, "📅 Ajouter à mon agenda"),
+          o.can_edit && !opts.compact ? h("button", { class: "btn ghost sm", onclick: () => eventForm(o) }, "Modifier") : null)));
+  }
+  async function agendaCard() {
+    let occ = []; try { occ = await API.events(new Date(Date.now() - 3 * 3600e3).toISOString(), new Date(Date.now() + 14 * 864e5).toISOString()); } catch (e) { return null; }
+    occ = occ.filter(o => Date.parse(o.ends) >= Date.now()).slice(0, 3);
+    if (!occ.length && S.me.role === "student") return null;
+    return h("div", { class: "card agcard" }, h("div", { class: "row", style: "margin-bottom:6px" }, h("h3", { style: "margin:0;flex:1" }, "📅 Prochains rendez-vous"), h("a", { href: "#/agenda", class: "muted", style: "font-weight:700;font-size:14px" }, "Tout voir →")),
+      occ.length ? occ.map(o => [h("div", { class: "agday" }, dayLabel(o.at)), eventItem(o, { compact: true })]) : h("p", { class: "muted", style: "margin:0" }, "Aucun rendez-vous programmé. ", h("a", { href: "#/agenda" }, "Programmer un cours ou un temps de prière →")));
+  }
+  async function pendingCard() {
+    let pend = []; try { pend = await API.myPending(); } catch (e) { return null; }
+    if (!pend.length) return null;
+    return h("div", { class: "card pendcard" }, h("h3", null, "📝 À terminer (" + pend.length + ")"), h("p", { class: "muted", style: "margin:-4px 0 8px;font-size:14px" }, "Ces cahiers sont ouverts mais pas encore envoyés à ton mentor."),
+      pend.slice(0, 5).map(x => h("a", { class: "pend", href: "#/lecon/" + x.lesson + "/cahier" }, h("div", { style: "flex:1;min-width:0" }, h("b", null, "Leçon " + x.lesson + " · " + x.title), h("div", { class: "cprog" }, h("i", { style: "width:" + Math.max(3, x.pct) + "%" })), h("small", null, x.pct ? "Rempli à " + x.pct + " %" : "Pas encore commencé")), h("span", { class: "btn gold sm" }, x.pct ? "Continuer" : "Commencer"))));
+  }
+  async function lateCard() {
+    let late = []; try { late = await API.classPending(); } catch (e) { return null; }
+    if (!late.length) return null;
+    return h("details", { class: "card latecard" }, h("summary", null, h("b", null, "⏳ Cahiers pas encore envoyés · " + late.length + " élève" + (late.length > 1 ? "s" : "")), h("span", { class: "muted" }, " (touchez pour voir)")),
+      h("p", { class: "muted", style: "font-size:13.5px" }, "Des rappels automatiques partent selon les réglages (Administration → Rappels). Vous pouvez aussi relancer un élève vous-même."),
+      late.map(s => h("div", { class: "late" }, h("div", { style: "flex:1;min-width:0" }, h("a", { href: "#/eleve/" + s.id }, h("b", null, s.name)), h("small", null, s.pending.map(x => x.lesson + " (" + x.pct + " %)").join(" · "))),
+        h("button", { class: "btn ghost sm", onclick: async (e) => { try { await API.nudge(s.id); e.target.textContent = "Relancé"; e.target.disabled = true; } catch (x) { toast(x.message); } } }, "🔔 Relancer"))));
+  }
+  async function viewAgenda() {
+    const unread = await unreadCount();
+    const from = new Date(Date.now() - 3 * 3600e3), to = new Date(Date.now() + 45 * 864e5);
+    const occ = (await API.events(from.toISOString(), to.toISOString())).filter(o => Date.parse(o.ends) >= Date.now());
+    const groups = {}; occ.forEach(o => { const d = dayLabel(o.at); (groups[d] = groups[d] || []).push(o); });
+    const canCreate = isStaff();
+    shell("#/agenda", unread, h("div", { class: "wrap page", style: "max-width:760px" },
+      h("div", { class: "chero aghero" }, h("div", null, h("div", { class: "k" }, "AGENDA"), h("h1", null, "Nos rendez-vous"), h("p", null, "Cours en ligne, prière, étude biblique : tu reçois un rappel sur ton téléphone avant chaque rendez-vous."))),
+      canCreate ? h("button", { class: "btn gold", style: "width:100%;margin:14px 0 0", onclick: () => eventForm(null) }, "+ Programmer un rendez-vous") : null,
+      occ.length ? Object.entries(groups).map(([d, os]) => [h("div", { class: "nday" }, d), h("div", { class: "evlist" }, os.map(o => eventItem(o)))])
+        : h("div", { class: "empty card", style: "margin-top:16px" }, "📅", h("br"), "Aucun rendez-vous pour le moment.", canCreate ? [h("br"), "Programmez le premier cours en ligne ou temps de prière."] : null)));
+  }
+  async function eventForm(o) {
+    const [classes, st] = await Promise.all([API.listClasses(), API.settings().catch(() => ({}))]);
+    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const pad = (n) => String(n).padStart(2, "0");
+    const base = o ? new Date(o.starts_at) : (() => { const d = new Date(Date.now() + 864e5); d.setHours(19, 0, 0, 0); return d; })();
+    const title = h("input", { class: "in", placeholder: "ex. Cours · Leçon 1-5, Prière du mercredi…", value: o ? o.title : "" });
+    const kind = h("select", { class: "in" }, Object.entries(KINDS).map(([k, [e, t]]) => h("option", { value: k }, e + " " + t))); kind.value = o ? o.kind : "cours";
+    const cls = h("select", { class: "in" }, S.me.role === "superadmin" ? h("option", { value: "" }, "🌍 Toute l'école") : null, mine.map(c => h("option", { value: c.id }, "👥 " + c.name))); cls.value = o ? (o.class_id || "") : (S.me.role === "superadmin" ? "" : (mine[0] || {}).id || "");
+    const date = h("input", { class: "in", type: "date", value: base.getFullYear() + "-" + pad(base.getMonth() + 1) + "-" + pad(base.getDate()) });
+    const time = h("input", { class: "in", type: "time", value: pad(base.getHours()) + ":" + pad(base.getMinutes()) });
+    const dur = h("select", { class: "in" }, [[30, "30 min"], [45, "45 min"], [60, "1 h"], [90, "1 h 30"], [120, "2 h"], [180, "3 h"]].map(([v, t]) => h("option", { value: v }, t))); dur.value = String(o ? o.duration : 90);
+    const recur = h("select", { class: "in" }, [["none", "Une seule fois"], ["weekly", "Chaque semaine (même jour, même heure)"], ["daily", "Chaque jour"]].map(([v, t]) => h("option", { value: v }, t))); recur.value = o ? o.recur : "none";
+    const until = h("input", { class: "in", type: "date", value: o && o.until ? o.until : "" });
+    const untilWrap = h("div", { class: o && o.recur !== "none" ? null : "hide" }, h("label", { class: "f" }, "Jusqu'au (facultatif)"), until);
+    recur.onchange = () => untilWrap.classList.toggle("hide", recur.value === "none");
+    const link = h("input", { class: "in", type: "url", placeholder: "https://meet.google.com/…", value: o ? o.link : (st.meet_link || "") });
+    const desc = h("textarea", { class: "in", rows: 2, placeholder: "Ce qu'il faut préparer (facultatif)" }); desc.value = o ? o.description : "";
+    const rem = o ? o.remind : [1440, 15];
+    const remBox = h("div", { class: "toggles" }, [[1440, "La veille"], [60, "1 h avant"], [15, "15 min avant"], [0, "À l'heure"]].map(([v, t]) => { const b = h("button", { type: "button", class: "tg" + (rem.includes(v) ? " on" : ""), "data-v": v }, t); b.onclick = () => b.classList.toggle("on"); return b; }));
+    const err = h("div", { class: "err hide" });
+    modal(o ? "Modifier le rendez-vous" : "Nouveau rendez-vous", [h("label", { class: "f" }, "Titre"), title, h("label", { class: "f" }, "Type"), kind, h("label", { class: "f" }, "Pour qui ?"), cls,
+      h("div", { class: "two" }, h("div", null, h("label", { class: "f" }, "Date"), date), h("div", null, h("label", { class: "f" }, "Heure"), time)),
+      h("label", { class: "f" }, "Durée"), dur, h("label", { class: "f" }, "Répétition"), recur, untilWrap,
+      h("label", { class: "f" }, "Lien de la réunion (Google Meet)"), link, h("label", { class: "f" }, "Description"), desc,
+      h("label", { class: "f" }, "🔔 Rappels envoyés sur les téléphones"), remBox, err],
+      (m) => [o ? h("button", { class: "btn bad", onclick: async () => { if (!await ask("Supprimer ce rendez-vous ?", h("p", null, o.recur !== "none" ? "Toutes les dates de cette série seront supprimées." : "Il disparaîtra de l'agenda de tous."), "Supprimer", true)) return; await API.deleteEvent(o.id); m.remove(); toast("Rendez-vous supprimé"); route(); } }, "Supprimer") : null,
+        h("button", { class: "btn ghost", onclick: () => m.remove() }, "Annuler"),
+        h("button", { class: "btn gold", onclick: async () => {
+          try { const start = new Date(date.value + "T" + (time.value || "00:00")); if (isNaN(start)) throw new Error("Date ou heure invalide");
+            await API.saveEvent({ id: o ? o.id : undefined, title: title.value, kind: kind.value, class_id: cls.value || null, starts_at: start.toISOString(), duration: +dur.value, recur: recur.value, until: until.value || null, link: link.value, description: desc.value, remind: [...remBox.querySelectorAll(".tg.on")].map(b => +b.dataset.v) });
+            m.remove(); toast(o ? "Rendez-vous modifié ✓" : "Rendez-vous programmé ✓ Les participants sont prévenus."); route(); }
+          catch (e) { err.textContent = e.message; err.classList.remove("hide"); } } }, o ? "Enregistrer" : "Programmer")]);
   }
 
   // =============================== NOTIFICATIONS ===============================
@@ -537,7 +806,7 @@
       h("button", { class: "x", "aria-label": "Fermer", onclick: () => { try { localStorage.setItem("dac-push-x", "1"); } catch (e) { } c.remove(); } }, "×"));
     return c;
   }
-  const NICON = { unlock: "🔓", answer: "💬", question: "💬", reply: "↩️", reaction: "❤️", community: "👥", submit: "📩", review: "✅", validated: "⭐", test: "🔔" };
+  const NICON = { certificate: "cap", reminder: "pencil", event: "calendar", dm: "mail", mention: "megaphone", unlock: "unlock", answer: "chat", question: "chat", reply: "reply", reaction: "heart", community: "people", submit: "inbox", review: "check", validated: "star", test: "bell" };
   async function viewNotifications() {
     const [r, unread] = await Promise.all([API.notifications(), unreadCount()]);
     const items = r.items;
@@ -551,7 +820,7 @@
           h("div", { class: "muted", style: "font-size:13.5px" }, st === "granted" ? "Tu es prévenu même quand l'application est fermée." : st === "ios-install" ? "Sur iPhone : installe d'abord l'application." : st === "denied" ? "Elles sont bloquées dans les réglages du navigateur." : st === "unsupported" ? "Ce navigateur ne les gère pas (essaie Chrome)." : "Reçois une alerte pour chaque nouvelle leçon, message ou réponse.")),
         st === "granted" ? h("button", { class: "btn ghost sm", onclick: async () => { await API.pushTest(); toast("Notification de test envoyée"); } }, "Tester") : st !== "unsupported" ? h("button", { class: "btn gold sm", onclick: enablePush }, "Activer") : null),
       items.length ? Object.entries(groups).map(([d, ns]) => [h("div", { class: "nday" }, d), h("div", { class: "nlist" }, ns.map(n => h("button", { class: "nitem" + (n.read ? "" : " unread"), onclick: () => open(n) },
-        h("div", { class: "nic" }, NICON[n.kind] || "🔔"), h("div", { class: "nmid" }, h("b", null, n.title), n.body ? h("span", null, n.body) : null, h("small", null, whenShort(n.created_at))), n.read ? null : h("i", { class: "ndot" }))))])
+        h("div", { class: "nic", html: V[NICON[n.kind] || "bell"] }), h("div", { class: "nmid" }, h("b", null, n.title), n.body ? h("span", null, U(n.body)) : null, h("small", null, whenShort(n.created_at))), n.read ? null : h("i", { class: "ndot" }))))])
         : h("div", { class: "empty card", style: "margin-top:16px" }, "🔔", h("br"), "Aucune notification pour l'instant.", h("br"), "Tu seras prévenu ici des nouvelles leçons, des messages de ton mentor et des réponses de la communauté.")));
   }
 
@@ -604,7 +873,7 @@
     fill(privBox, h("button", { class: "btn gold newdm", onclick: () => pickPerson("Nouveau message privé", (u) => go("#/communaute/" + dmWith(u.id))) }, "✉️ Nouveau message privé"),
       dms.length ? h("div", { class: "rooms" }, dms.map(x => h("a", { class: "room", href: "#/communaute/" + x.room }, roomAvatar(x.room),
         h("div", { class: "rmid" }, h("div", { class: "rtop" }, h("b", null, x.peer ? x.peer.name : "Conversation"), x.last ? h("span", { class: "rtime" + (x.unread ? " new" : "") }, whenShort(x.last.created_at)) : null),
-          h("div", { class: "rbot" }, h("span", { class: "rprev" }, x.last ? [(x.last.mine ? "Moi : " : ""), x.last.image && !x.last.body ? "📷 Photo" : (x.last.image ? "📷 " : "") + x.last.body] : ""), x.unread ? h("span", { class: "rbadge" }, x.unread) : null)))))
+          h("div", { class: "rbot" }, h("span", { class: "rprev" }, x.last ? [(x.last.mine ? "Moi : " : ""), x.last.image ? "📷 " : "", x.last.image && !x.last.body ? "Photo" : U(x.last.body)] : ""), x.unread ? h("span", { class: "rbadge" }, x.unread) : null)))))
         : h("div", { class: "empty card" }, "✉️", h("br"), "Aucune conversation privée.", h("br"), "Écris directement à un autre disciple ou à ton mentor."));
     const st = Object.fromEntries(stats.rooms.map(r => [r.room, r]));
     let filter = "all", q = "";
@@ -621,7 +890,7 @@
         return h(lk ? "button" : "a", lk ? { class: "room locked", type: "button", onclick: () => lessonPreview(L[r]) } : { class: "room", href: "#/communaute/" + r },
           roomAvatar(r),
           h("div", { class: "rmid" }, h("div", { class: "rtop" }, h("b", null, roomTitle(r)), x && x.last ? h("span", { class: "rtime" + (x.unread ? " new" : "") }, whenShort(x.last.created_at)) : null),
-            h("div", { class: "rbot" }, h("span", { class: "rprev" }, lk ? "🔒 S'ouvrira quand la leçon sera débloquée" : x && x.last ? [(x.last.mine ? "Moi" : x.last.name.split(" ")[0]) + " : ", x.last.image && !x.last.body ? "📷 Photo" : (x.last.image ? "📷 " : "") + x.last.body] : r === "general" ? "Le salon de toute l'école : présente-toi !" : "Aucun message. Lance la discussion !"),
+            h("div", { class: "rbot" }, h("span", { class: "rprev" }, lk ? "🔒 S'ouvrira quand la leçon sera débloquée" : x && x.last ? [(x.last.mine ? "Moi" : x.last.name.split(" ")[0]) + " : ", x.last.image ? "📷 " : "", x.last.image && !x.last.body ? "Photo" : U(x.last.body)] : r === "general" ? "Le salon de toute l'école : présente-toi !" : "Aucun message. Lance la discussion !"),
               x && x.unread ? h("span", { class: "rbadge" }, x.unread > 99 ? "99+" : x.unread) : null))); };
       fill(list, act.map(row), locked.length ? [h("div", { class: "rsec" }, "🔒 Bientôt (" + locked.length + ")"), locked.map(row)] : null, !act.length && !locked.length ? h("div", { class: "empty" }, "Aucun salon trouvé.") : null);
     };
@@ -701,23 +970,23 @@
       const re = new RegExp("(https?:\\/\\/[^\\s<]+)" + (ms.length ? "|(" + ms.map(m => "@" + esc(m.name)).join("|") + ")" : ""), "g");
       const out = []; let last = 0, m;
       while ((m = re.exec(text))) {
-        if (m.index > last) out.push(text.slice(last, m.index));
+        if (m.index > last) out.push(U(text.slice(last, m.index)));
         if (m[1]) out.push(h("a", { href: m[1], target: "_blank", rel: "noopener" }, m[1]));
         else { const who = ms.find(x => "@" + x.name === m[0]); out.push(h("span", { class: "mention" + (who && who.id === S.me.id ? " me" : ""), onclick: (e) => { e.stopPropagation(); if (who) personSheet({ id: who.id, name: who.name, role: (S.peers[who.id] || {}).role }); } }, m[0])); }
         last = m.index + m[0].length;
       }
-      if (last < text.length) out.push(text.slice(last)); return out;
+      if (last < text.length) out.push(U(text.slice(last))); return out;
     }
     function bubble(p) {
       const mine = p.author.id === S.me.id, staff = p.author.role !== "student";
       const b = h("div", { class: "bub" + (p.deleted ? " del" : "") },
         !mine && !isDM(room) ? h("div", { class: "bname", style: "color:" + nameColor(p.author.id), onclick: (e) => { e.stopPropagation(); personSheet(p.author); } }, p.author.name, staff ? h("span", { class: "rolechip" }, p.author.role === "superadmin" ? "Responsable" : "Mentor") : null) : null,
         p.fwd ? h("div", { class: "bfwd" }, "↪ Transféré · de " + p.fwd) : null,
-        p.reply ? h("div", { class: "bquote", onclick: (e) => { e.stopPropagation(); if (p.reply.room && p.reply.room !== room) go("#/communaute/" + p.reply.room); else jump(p.reply.id); } }, h("b", null, p.reply.name, p.reply.room && p.reply.room !== room ? h("small", null, " · " + roomShort(p.reply.room)) : null), h("span", null, p.reply.image ? "📷 " : "", p.reply.body || (p.reply.image ? "Photo" : ""))) : null,
+        p.reply ? h("div", { class: "bquote", onclick: (e) => { e.stopPropagation(); if (p.reply.room && p.reply.room !== room) go("#/communaute/" + p.reply.room); else jump(p.reply.id); } }, h("b", null, p.reply.name, p.reply.room && p.reply.room !== room ? h("small", null, " · " + roomShort(p.reply.room)) : null), h("span", null, p.reply.image ? "📷 " : "", U(p.reply.body || (p.reply.image ? "Photo" : "")))) : null,
         p.image ? h("img", { class: "bimg", src: p.image, alt: "Photo", loading: "lazy", onclick: (e) => { e.stopPropagation(); viewer(p.image); } }) : null,
         p.deleted ? h("div", { class: "btext" }, "🚫 Message supprimé") : p.body ? h("div", { class: "btext" }, linkify(p.body, p.mentions)) : null,
         h("div", { class: "bmeta" }, hhmm(p.created_at)));
-      const rx = p.reactions.length ? h("div", { class: "rx" }, p.reactions.map(r => h("button", { class: r.mine ? "mine" : null, title: "Voir qui a réagi", onclick: (e) => { e.stopPropagation(); whoReacted(p); } }, r.emoji, h("span", null, r.n)))) : null;
+      const rx = p.reactions.length ? h("div", { class: "rx" }, p.reactions.map(r => h("button", { class: r.mine ? "mine" : null, title: "Voir qui a réagi", onclick: (e) => { e.stopPropagation(); whoReacted(p); } }, U(r.emoji), h("span", null, r.n)))) : null;
       const row = h("div", { class: "bm" + (mine ? " mine" : ""), id: "p-" + p.id }, !mine ? h("div", { class: "bav", style: "background:" + nameColor(p.author.id), onclick: () => personSheet(p.author) }, initials(p.author.name)) : null, h("div", { class: "bcol" }, b, rx));
       if (!p.deleted) b.addEventListener("click", () => actions(p));
       return row;
@@ -760,7 +1029,7 @@
     function setReply(p) {
       replyTo = p;
       if (!p) { replyBar.classList.add("hide"); return; }
-      fill(replyBar, h("div", { class: "rbq" }, h("b", null, "Réponse à " + (p.author.id === S.me.id ? "toi-même" : p.author.name)), h("span", null, p.image ? "📷 " : "", (p.body || "Photo").slice(0, 100))), h("button", { class: "x", "aria-label": "Annuler", onclick: () => setReply(null) }, "×"));
+      fill(replyBar, h("div", { class: "rbq" }, h("b", null, "Réponse à " + (p.author.id === S.me.id ? "toi-même" : p.author.name)), h("span", null, p.image ? "📷 " : "", U((p.body || "Photo").slice(0, 100)))), h("button", { class: "x", "aria-label": "Annuler", onclick: () => setReply(null) }, "×"));
       replyBar.classList.remove("hide"); ta.focus();
     }
     async function react(p, emoji) {
@@ -769,7 +1038,7 @@
     function actions(p) {
       const mine = p.author.id === S.me.id;
       const m = modal(p.author.id === S.me.id ? "Mon message" : "Message de " + p.author.name.split(" ")[0], h("div", null,
-        h("div", { class: "emorow" }, ["👍", "❤️", "🙏", "🔥", "😂", "👏"].map(e => h("button", { class: p.reactions.some(r => r.emoji === e && r.mine) ? "on" : null, onclick: () => { m.remove(); react(p, e); } }, e))),
+        h("div", { class: "emorow" }, ["👍", "❤️", "🙏", "🔥", "😂", "👏"].map(e => h("button", { class: p.reactions.some(r => r.emoji === e && r.mine) ? "on" : null, onclick: () => { m.remove(); react(p, e); } }, U(e)))),
         h("div", { class: "actlist" },
           h("button", { onclick: () => { m.remove(); setReply(p); } }, "↩️", h("span", null, "Répondre")),
           !mine && !isDM(room) ? h("button", { onclick: () => { m.remove(); S.pendingReply = p; go("#/communaute/" + dmWith(p.author.id)); } }, "🔒", h("span", null, "Répondre en privé à " + p.author.name.split(" ")[0])) : null,
@@ -785,9 +1054,9 @@
       const total = data.reduce((a, x) => a + x.users.length, 0);
       let sel = "all"; const tabs = h("div", { class: "rtabs" }), list = h("div", { class: "fwdlist plist" });
       const draw = () => {
-        fill(tabs, h("button", { class: sel === "all" ? "on" : null, onclick: () => { sel = "all"; draw(); } }, "Tous " + total), data.map(x => h("button", { class: sel === x.emoji ? "on" : null, onclick: () => { sel = x.emoji; draw(); } }, x.emoji + " " + x.users.length)));
+        fill(tabs, h("button", { class: sel === "all" ? "on" : null, onclick: () => { sel = "all"; draw(); } }, "Tous " + total), data.map(x => h("button", { class: sel === x.emoji ? "on" : null, onclick: () => { sel = x.emoji; draw(); } }, U(x.emoji + " " + x.users.length))));
         const rows = data.filter(x => sel === "all" || x.emoji === sel).flatMap(x => x.users.map(u => ({ ...u, emoji: x.emoji })));
-        fill(list, rows.map(u => h("button", { onclick: () => { if (u.id !== S.me.id) { m.remove(); personSheet({ id: u.id, name: u.name, role: (S.peers[u.id] || {}).role }); } } }, h("div", { class: "ravatar dm", style: "background:" + nameColor(u.id) }, initials(u.name)), h("span", { class: "pmid" }, h("b", null, u.name), u.id === S.me.id ? h("small", null, "Touche le message pour changer ta réaction") : null), h("span", { class: "remo" }, u.emoji))));
+        fill(list, rows.map(u => h("button", { onclick: () => { if (u.id !== S.me.id) { m.remove(); personSheet({ id: u.id, name: u.name, role: (S.peers[u.id] || {}).role }); } } }, h("div", { class: "ravatar dm", style: "background:" + nameColor(u.id) }, initials(u.name)), h("span", { class: "pmid" }, h("b", null, u.name), u.id === S.me.id ? h("small", null, "Touche le message pour changer ta réaction") : null), h("span", { class: "remo" }, U(u.emoji)))));
       };
       draw();
       const m = modal("Réactions", h("div", null, tabs, list), (mm) => [h("button", { class: "btn ghost", onclick: () => mm.remove() }, "Fermer")]);
@@ -895,22 +1164,25 @@
     };
     draw();
     let storage = null; if (S.me.role === "superadmin") { try { const st = await API.adminStatus(); if (!st.persistent) storage = storageCard(st); } catch (e) { } }
+    const [agCard, ltCard] = await Promise.all([agendaCard(), lateCard()]);
     shell("#/mentor", unread, h("div", { class: "wrap page" }, storage, installCard(), pushCard(),
-      h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, S.me.role === "superadmin" ? "SUPERADMIN" : "MENTOR"), h("h1", null, "Bonjour, " + (S.me.full_name || S.me.username)), h("p", null, "Suivez vos élèves, corrigez leurs cahiers et répondez à leurs questions."))),
+      h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, S.me.role === "superadmin" ? "SUPERADMIN" : "MENTOR"), h("h1", null, "Bonjour, " + (S.me.full_name || S.me.username)), h("p", null, "Suivez vos élèves, corrigez leurs cahiers et répondez à leurs questions."),
+        h("div", { class: "row", style: "margin-top:14px;gap:8px" }, h("a", { class: "btn gold sm", href: "#/stats" }, "📊 Statistiques"), h("a", { class: "btn sm wa", href: "#/whatsapp" }, "💬 Résumé WhatsApp")))),
       h("div", { class: "stats" }, h("div", { class: "stat" }, h("b", null, students.length), h("span", null, "Élèves")), h("div", { class: "stat" }, h("b", null, toReview), h("span", null, "Cahiers à corriger")), h("div", { class: "stat" }, h("b", null, unread), h("span", null, "Questions non lues")), h("div", { class: "stat" }, h("b", null, revs.filter(r => r.validated).length), h("span", null, "Leçons validées"))),
-      body));
+      agCard, ltCard, body));
   }
 
   async function viewStudentDetail(sid) {
     const s = await API.getUser(sid); if (!s) return go("#/mentor");
     const [unlocks, meta, revs, quiz, msgs, unread, classes, users] = await Promise.all([API.listUnlocks(), API.listAnswersMeta([sid]), API.listReviews([sid]), API.listQuiz([sid]), API.listMessages([sid]), unreadCount(), API.listClasses(), API.listUsers()]);
     const unl = unlockedFor(s, unlocks); const c = classes.find(x => x.id === s.class_id), mentor = users.find(u => u.id === s.mentor_id);
+    const certs = await API.certs(sid).catch(() => []);
     S.deep = { back: "#/mentor", title: s.full_name || s.username, sub: "Suivi de l'élève" };
     shell("#/mentor", unread, h("div", { class: "wrap page" }, h("a", { class: "desk", href: "#/mentor" }, "← Tableau de bord"),
       h("div", { class: "card pcard", style: "margin-top:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap" }, h("div", { class: "avatar", style: "width:56px;height:56px;font-size:20px" }, initials(s.full_name)),
         h("div", { style: "flex:1" }, h("h2", { style: "margin:0" }, s.full_name || s.username), h("div", { class: "muted" }, "@" + s.username + " · " + (c ? c.name : "sans classe") + " · mentor : " + (mentor ? mentor.full_name : "—"))),
         h("button", { class: "btn ghost sm", onclick: () => resetPw(s) }, "Nouveau mot de passe")),
-      PHASES.map(p => h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Phase " + p.n + " · " + p.t), labelize(h("table", { class: "t" }, h("tr", null, h("th", null, "Leçon"), h("th", null, "Statut"), h("th", null, "Test"), h("th", null, "Questions"), h("th", null, "Accès individuel")),
+      PHASES.map(p => h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "row" }, h("h3", { style: "margin:0;flex:1" }, "Phase " + p.n + " · " + p.t), (() => { const cs = certs.find(x => x.phase === p.n); return cs ? (cs.eligible ? h("a", { class: "btn gold sm", href: certUrl(sid, p.n, false), target: "_blank" }, "🎓 Certificat") : h("span", { class: "chip l" }, "🎓 " + cs.validated + "/" + cs.total + " validées")) : null; })()), labelize(h("table", { class: "t" }, h("tr", null, h("th", null, "Leçon"), h("th", null, "Statut"), h("th", null, "Test"), h("th", null, "Questions"), h("th", null, "Accès individuel")),
         LESSONS.filter(l => l.ph === p.n).map(l => { const m = meta.find(x => x.lesson === l.n), r = revs.find(x => x.lesson === l.n), q = bestQuiz(quiz, sid, l.n), st = lessonStatus(l.n, unl, m, r, q);
           const own = unlocks.some(u => u.student_id === sid && u.lesson === l.n), viaClass = unlocks.some(u => u.class_id && u.class_id === s.class_id && u.lesson === l.n);
           const um = msgs.filter(x => x.lesson === l.n), uu = um.filter(x => !x.read_by_staff).length;
@@ -933,14 +1205,14 @@
     const arr = Object.entries(groups).sort((a, b) => { const ua = a[1].some(m => !m.read_by_staff), ub = b[1].some(m => !m.read_by_staff); if (ua !== ub) return ub - ua; return b[1][b[1].length - 1].created_at.localeCompare(a[1][a[1].length - 1].created_at); });
     shell("#/inbox", unread, h("div", { class: "wrap page" }, h("h1", null, "Questions des élèves"), h("p", { class: "muted" }, "Les questions non lues apparaissent en premier. Cliquez pour répondre."),
       arr.length ? h("div", { class: "inbox" }, arr.map(([k, th]) => { const [sid, n, key] = k.split("|"), s = students.find(u => u.id === sid) || {}, l = L[n], last = th[th.length - 1], un = th.filter(m => !m.read_by_staff).length;
-        return h("a", { href: "javascript:void 0", onclick: () => openThread(s, l, key, itemTitle(l, key), true) }, h("div", { class: "avatar" }, initials(s.full_name)), h("div", { style: "flex:1;min-width:0" }, h("b", null, (s.full_name || "Élève") + " · Leçon " + n), h("div", { style: "font-size:14px" }, itemTitle(l, key).slice(0, 90)), h("div", { class: "muted", style: "font-size:13px" }, (last.author_id === S.me.id ? "Vous : " : "") + last.body.slice(0, 90) + " · " + fmt(last.created_at))), un ? h("span", { class: "chip g" }, un + " non lu" + (un > 1 ? "s" : "")) : h("span", { class: "chip v" }, "Répondu")); }))
+        return h("a", { href: "javascript:void 0", onclick: () => openThread(s, l, key, itemTitle(l, key), true) }, h("div", { class: "avatar" }, initials(s.full_name)), h("div", { style: "flex:1;min-width:0" }, h("b", null, (s.full_name || "Élève") + " · Leçon " + n), h("div", { style: "font-size:14px" }, itemTitle(l, key).slice(0, 90)), h("div", { class: "muted", style: "font-size:13px" }, (last.author_id === S.me.id ? "Vous : " : "") + U(last.body.slice(0, 90)) + " · " + fmt(last.created_at))), un ? h("span", { class: "chip g" }, un + " non lu" + (un > 1 ? "s" : "")) : h("span", { class: "chip v" }, "Répondu")); }))
         : h("div", { class: "empty card" }, "Aucune question pour le moment.")));
   }
 
   // =============================== SUPERADMIN ===============================
   function createUserModal(classes, mentors) {
     const gen = () => Math.random().toString(36).slice(2, 6) + Math.floor(1000 + Math.random() * 9000);
-    const name = h("input", { class: "in", placeholder: "Prénom et nom" }), user = h("input", { class: "in", placeholder: "ex. grace.mbala" }), pw = h("input", { class: "in", value: gen() });
+    const name = h("input", { class: "in", placeholder: "Prénom et nom" }), user = h("input", { class: "in", placeholder: "ex. grace.mbala" }), pw = h("input", { class: "in", value: gen() }), phoneIn = h("input", { class: "in", type: "tel", placeholder: "+234 801 234 5678 (facultatif)" });
     const role = h("select", { class: "in" }, [["student", "Élève"], ["admin", "Mentor"], ["superadmin", "Superadmin"]].map(([v, t]) => h("option", { value: v }, t)));
     const cls = h("select", { class: "in" }, h("option", { value: "" }, "— aucune —"), classes.map(c => h("option", { value: c.id }, c.name)));
     const men = h("select", { class: "in" }, h("option", { value: "" }, "— aucun —"), mentors.map(m => h("option", { value: m.id }, m.full_name || m.username)));
@@ -951,9 +1223,9 @@
     user.oninput = () => { user.dataset.touched = 1; };
     const err = h("div", { class: "err hide" });
     modal("Créer un utilisateur", [h("label", { class: "f" }, "Nom complet"), name, h("label", { class: "f" }, "Identifiant de connexion"), user, h("label", { class: "f" }, "Mot de passe (à lui communiquer)"), pw,
-      h("label", { class: "f" }, "Rôle"), role, h("label", { class: "f" }, "Classe"), cls, menWrap, err],
+      h("label", { class: "f" }, "Numéro WhatsApp"), phoneIn, h("label", { class: "f" }, "Rôle"), role, h("label", { class: "f" }, "Classe"), cls, menWrap, err],
       (m) => [h("button", { class: "btn ghost", onclick: () => m.remove() }, "Annuler"), h("button", { class: "btn", onclick: async () => {
-        try { await API.createUser({ full_name: name.value.trim(), username: user.value.trim(), password: pw.value, role: role.value, class_id: cls.value || null, mentor_id: role.value === "student" ? (men.value || null) : null });
+        try { await API.createUser({ full_name: name.value.trim(), username: user.value.trim(), password: pw.value, phone: phoneIn.value, role: role.value, class_id: cls.value || null, mentor_id: role.value === "student" ? (men.value || null) : null });
           m.remove(); modal("Compte créé ✓", h("div", null, h("p", null, "Communiquez ces informations à ", h("b", null, name.value.trim()), " :"), h("div", { class: "note", style: "font-size:16px" }, "Adresse : ", h("b", null, location.origin), h("br"), "Identifiant : ", h("b", null, user.value.trim().toLowerCase()), h("br"), "Mot de passe : ", h("b", null, pw.value))), (m2) => [h("button", { class: "btn", onclick: () => { m2.remove(); route(); } }, "OK")]); }
         catch (e) { err.textContent = e.message; err.classList.remove("hide"); } } }, "Créer le compte")]);
     name.focus();
@@ -972,7 +1244,7 @@
     const [users, classes, unread] = await Promise.all([API.listUsers(), API.listClasses(), unreadCount()]);
     const mentors = users.filter(u => u.role !== "student");
     const body = h("div");
-    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Comptes"], ["deblocage", "Déblocage"], ["classes", "Classes"], ["sauvegarde", "Sauvegarde"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
+    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Comptes"], ["deblocage", "Déblocage"], ["classes", "Classes"], ["rappels", "Rappels"], ["sauvegarde", "Sauvegarde"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
     if (tab === "users") {
       let q = "", rf = "all";
       const search = h("input", { class: "in", placeholder: "Rechercher un nom ou un identifiant…", style: "max-width:320px" });
@@ -994,6 +1266,25 @@
       draw();
       body.append(h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "row toolbar", style: "margin-bottom:14px" }, h("button", { class: "btn gold", onclick: () => createUserModal(classes, mentors) }, "+ Créer un utilisateur"), search, roleF, h("span", { class: "spacer" }), h("span", { class: "muted", style: "font-size:13px" }, users.filter(u => u.role === "student").length + " élèves · " + mentors.length + " mentors / admins")),
         h("div", { class: "note", style: "margin-bottom:12px" }, "Créez vous-même les comptes (bouton « Créer un utilisateur ») et communiquez à chacun son identifiant et son mot de passe. Les élèves peuvent aussi créer leur compte avec le code de leur classe. Changez ici le rôle, le mentor et la classe de chacun."), tbl));
+    } else if (tab === "rappels") {
+      const st = await API.settings();
+      const on = h("button", { type: "button", class: "tg" + (st.rem_on === "1" ? " on" : "") }, st.rem_on === "1" ? "Activés" : "Désactivés"); on.onclick = () => { on.classList.toggle("on"); on.textContent = on.classList.contains("on") ? "Activés" : "Désactivés"; };
+      const num = (v, min, max) => h("input", { class: "in", type: "number", min, max, value: v, style: "max-width:110px" });
+      const delay = num(st.rem_delay, 0, 30), every = num(st.rem_every, 1, 30), hour = num(st.rem_hour, 0, 23), max = num(st.rem_max, 1, 30);
+      const meet = h("input", { class: "in", type: "url", placeholder: "https://meet.google.com/xxx-xxxx-xxx", value: st.meet_link || "" });
+      const line = (label, input, hint) => h("div", { class: "setrow" }, h("div", { style: "flex:1;min-width:0" }, h("b", null, label), hint ? h("small", null, hint) : null), input);
+      body.append(h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "📝 Rappels « remplis ton cahier »"),
+        h("p", { class: "muted", style: "font-size:14px" }, "Quand une leçon est ouverte et que l'élève n'a pas encore envoyé son cahier, il reçoit automatiquement une notification (avec le pourcentage déjà rempli). Un élève reçoit au plus un rappel par jour."),
+        line("Rappels automatiques", on),
+        line("Premier rappel", h("div", { class: "row", style: "flex-wrap:nowrap" }, delay, h("span", null, "jours")), "après l'ouverture de la leçon"),
+        line("Ensuite, tous les", h("div", { class: "row", style: "flex-wrap:nowrap" }, every, h("span", null, "jours")), "tant que le cahier n'est pas envoyé"),
+        line("Heure d'envoi", h("div", { class: "row", style: "flex-wrap:nowrap" }, hour, h("span", null, "h")), "fuseau horaire : " + st.timezone),
+        line("Maximum par leçon", h("div", { class: "row", style: "flex-wrap:nowrap" }, max, h("span", null, "rappels"))),
+        h("h3", { style: "margin-top:22px" }, "🎥 Agenda"), line("Lien Google Meet habituel", meet, "proposé automatiquement pour chaque nouveau rendez-vous"),
+        h("div", { class: "row", style: "margin-top:18px" },
+          h("button", { class: "btn gold", onclick: async () => { try { await API.saveSettings({ rem_on: on.classList.contains("on"), rem_delay: delay.value, rem_every: every.value, rem_hour: hour.value, rem_max: max.value, meet_link: meet.value }); toast("Réglages enregistrés ✓"); } catch (e) { toast(e.message); } } }, "Enregistrer"),
+          h("button", { class: "btn ghost", onclick: async () => { if (!await ask("Envoyer les rappels maintenant ?", h("p", null, "Chaque élève qui a un cahier ouvert non envoyé (et qui n'a pas été relancé récemment) recevra une notification."), "Envoyer")) return; const r = await API.runReminders(); toast(r.sent + " élève" + (r.sent > 1 ? "s" : "") + " relancé" + (r.sent > 1 ? "s" : "")); } }, "Envoyer les rappels maintenant")),
+        h("p", { class: "muted", style: "font-size:13px;margin-top:14px" }, "Les rendez-vous (cours en ligne, prière, étude biblique…) se programment dans le menu Agenda, avec leurs propres rappels.")));
     } else if (tab === "sauvegarde") {
       const st = await API.adminStatus();
       const file = h("input", { type: "file", accept: ".db,application/octet-stream", class: "hide" });
@@ -1077,11 +1368,20 @@
   async function viewProfile() {
     const unread = await unreadCount();
     const name = h("input", { class: "in", value: S.me.full_name || "" }), pw = h("input", { class: "in", type: "password", placeholder: "Nouveau mot de passe" });
+    const phone = h("input", { class: "in", type: "tel", placeholder: "+234 801 234 5678", value: S.me.phone || "" });
+    const certs = S.me.role === "student" ? await API.certs(S.me.id).catch(() => []) : [];
+    const themeBox = h("div", { class: "themes" });
+    const drawTheme = () => { const cur = getTheme(); fill(themeBox, [["auto", "📱 Comme le téléphone"], ["light", "☀️ Clair"], ["dark", "🌙 Sombre"]].map(([k, t]) => h("button", { class: cur === k ? "on" : null, onclick: () => { setTheme(k); drawTheme(); } }, t))); };
+    drawTheme();
     shell("#/profil", unread, h("div", { class: "wrap page", style: "max-width:560px" }, h("h1", null, "Mon profil"),
       h("div", { class: "card profhead" }, h("div", { class: "avatar big" }, initials(S.me.full_name || S.me.username)), h("div", null, h("b", null, S.me.full_name || S.me.username), h("div", { class: "muted" }, "@" + S.me.username))),
       h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "muted" }, "Identifiant : ", h("b", null, S.me.username), " · Rôle : ", { student: "élève", admin: "mentor", superadmin: "superadmin" }[S.me.role]),
         h("label", { class: "f" }, "Mon nom complet"), name, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { S.me = await API.updateUser(S.me.id, { full_name: name.value.trim() }); toast("Nom enregistré"); } catch (e) { toast(e.message); } } }, "Enregistrer"),
+        h("label", { class: "f", style: "margin-top:22px" }, "Mon numéro WhatsApp (facultatif)"), phone, h("small", { class: "muted", style: "display:block;margin-top:4px" }, "Format international, ex. +234… Votre mentor pourra vous envoyer un point sur WhatsApp."),
+        h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { S.me = await API.updateUser(S.me.id, { phone: phone.value }); toast(S.me.phone ? "Numéro enregistré" : "Numéro retiré"); } catch (e) { toast(e.message); } } }, "Enregistrer"),
         h("label", { class: "f", style: "margin-top:22px" }, "Changer mon mot de passe"), pw, h("button", { class: "btn sm", style: "margin-top:10px", onclick: async () => { try { await API.changeMyPassword(pw.value); pw.value = ""; toast("Mot de passe modifié"); } catch (e) { toast(e.message); } } }, "Modifier")),
+      h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Apparence"), h("p", { class: "muted", style: "margin-top:-4px" }, "Le mode sombre repose les yeux pour lire le soir."), themeBox),
+      certs.length ? h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "🎓 Mes certificats"), certs.map(c => certBlock(c, S.me.id))) : null,
       h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "Notifications"), h("p", { class: "muted" }, pushState() === "granted" ? "✓ Activées sur cet appareil." : "Sois prévenu des nouvelles leçons, des messages et des réponses."), h("a", { class: "btn ghost sm", href: "#/notifications" }, ic("bell"), "Gérer mes notifications")),
       h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "L'application"),
         standalone() ? h("p", { class: "muted" }, "✓ L'application est installée sur cet appareil.") : [h("p", { class: "muted" }, "Installe l'application sur ton téléphone : elle s'ouvre en plein écran depuis ton écran d'accueil, comme WhatsApp."), h("button", { class: "btn gold sm", onclick: doInstall }, "📲 Installer l'application")],
@@ -1092,6 +1392,7 @@
   // =============================== ROUTEUR ===============================
   async function route() {
     try {
+      if (/^#\/?verifier\//.test(location.hash)) return viewVerify(decodeURIComponent(location.hash.split("/").pop()));
       if (!S.me) S.me = await API.me();
       if (!S.me) return viewLogin();
       const p = (location.hash.replace(/^#\/?/, "") || "").split("/");
@@ -1100,6 +1401,9 @@
       if (S.vv) { S.vv(); S.vv = null; }
       document.body.classList.remove("is-room");
       if (p[0] === "notifications") return viewNotifications();
+      if (p[0] === "agenda") return viewAgenda();
+      if (p[0] === "stats") return viewStats(p[1], p[2]);
+      if (p[0] === "whatsapp") return viewWhatsApp(p[1]);
       if (p[0] === "communaute") return p[1] ? viewRoom(decodeURIComponent(p[1])) : viewCommunity();
       if (p[0] === "lecon") return viewLesson(p[1], p[2]);
       if (p[0] === "revue" && isStaff()) return viewLesson(p[2], p[3], p[1]);

@@ -73,7 +73,15 @@ function openDb() {
     url TEXT NOT NULL DEFAULT '#/', read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, id);
   CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS activity (user_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, day));
+  CREATE TABLE IF NOT EXISTS certificates (code TEXT PRIMARY KEY, student_id TEXT NOT NULL, phase INTEGER NOT NULL, issued_at TEXT NOT NULL, UNIQUE (student_id, phase));
+  CREATE TABLE IF NOT EXISTS reminder_log (student_id TEXT NOT NULL, lesson TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, last_at TEXT NOT NULL, PRIMARY KEY (student_id, lesson));
+  CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'cours', class_id TEXT, starts_at TEXT NOT NULL, duration INTEGER NOT NULL DEFAULT 60,
+    recur TEXT NOT NULL DEFAULT 'none', until TEXT, link TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', remind TEXT NOT NULL DEFAULT '[1440,15]', created_by TEXT, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS event_log (key TEXT PRIMARY KEY, sent_at TEXT NOT NULL);
   `);
+  if (!db.prepare("PRAGMA table_info(users)").all().some(c => c.name === "phone")) db.exec("ALTER TABLE users ADD COLUMN phone TEXT");
   if (!db.prepare("PRAGMA table_info(community_posts)").all().some(c => c.name === "mentions")) db.exec("ALTER TABLE community_posts ADD COLUMN mentions TEXT");
 }
 openDb();
@@ -129,7 +137,7 @@ function isSecure(req) { if (COOKIE_SECURE === "true") return true; if (COOKIE_S
 function sessionCookie(req, token, maxAge) { return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${isSecure(req) ? "; Secure" : ""}`; }
 
 // ---------- représentation publique ----------
-const pubUser = (u) => u && ({ id: u.id, username: u.username, full_name: u.full_name, role: u.role, class_id: u.class_id, mentor_id: u.mentor_id, active: !!u.active, created_at: u.created_at });
+const pubUser = (u) => u && ({ id: u.id, username: u.username, full_name: u.full_name, phone: u.phone || "", role: u.role, class_id: u.class_id, mentor_id: u.mentor_id, active: !!u.active, created_at: u.created_at });
 const pubAns = (a) => a && ({ student_id: a.student_id, lesson: a.lesson, data: JSON.parse(a.data || "{}"), submitted: !!a.submitted, submitted_at: a.submitted_at, updated_at: a.updated_at });
 const pubRev = (r) => r && ({ student_id: r.student_id, lesson: r.lesson, items: JSON.parse(r.items || "{}"), general: r.general, validated: !!r.validated, mentor_id: r.mentor_id, updated_at: r.updated_at });
 const pubQuiz = (x) => ({ id: x.id, student_id: x.student_id, lesson: x.lesson, score: x.score, total: x.total, detail: JSON.parse(x.detail || "[]"), created_at: x.created_at });
@@ -158,7 +166,18 @@ function throttle(key) {
 }
 
 // ---------- titres des leçons (lus dans public/js/content.js) ----------
-const LESSON_TITLES = (() => { try { const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(PUBLIC, "js", "content.js"), "utf8"), ctx); return Object.fromEntries((ctx.window.LESSONS || []).map(l => [l.n, l.t])); } catch (e) { return {}; } })();
+const CONTENT = (() => { try { const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(PUBLIC, "js", "content.js"), "utf8"), ctx); return ctx.window; } catch (e) { return {}; } })();
+const LESSONS = CONTENT.LESSONS || [], PHASES = CONTENT.PHASES || [];
+const LESSON_TITLES = Object.fromEntries(LESSONS.map(l => [l.n, l.t]));
+const LESSON_BY = Object.fromEntries(LESSONS.map(l => [l.n, l]));
+// part du cahier déjà remplie (0 à 100)
+function completion(n, data) {
+  const l = LESSON_BY[n]; if (!l) return 0; data = data || {};
+  const f = (v) => typeof v === "string" ? v.trim().length > 0 : Array.isArray(v) ? v.some(r => Array.isArray(r) ? r.some(c => String(c || "").trim()) : String(r || "").trim()) : v != null && v !== "" && v !== false;
+  const checks = ["V", ...l.wb.q.map((_, i) => "A" + (i + 1)), ...l.wb.vf.map((_, i) => "B" + (i + 1)), ...l.wb.ex.map(e => e.k), "EJ", "Z1", "Z2"].map(k => f(data[k]));
+  checks.push(Object.values(data.D || {}).some(Boolean), [1, 2, 3, 4, 5, 6, 7].some(i => f(data["E" + i])));
+  return Math.round(100 * checks.filter(Boolean).length / checks.length);
+}
 const lessonName = (n) => "Leçon " + n + (LESSON_TITLES[n] ? " · " + LESSON_TITLES[n] : "");
 const firstName = (u) => ((u && (u.full_name || u.username)) || "Quelqu'un").split(" ")[0];
 const clip = (t, n = 120) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
@@ -206,7 +225,9 @@ function pushTo(sub, data) {
   });
   req.on("error", () => { }); req.on("timeout", () => req.destroy()); req.end(body);
 }
+const stripEmoji = (t) => String(t || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2190}-\u{21FF}\u{23E9}-\u{23FA}\u{FE0F}\u{200D}]/gu, "").replace(/\s{2,}/g, " ").trim();
 function notify(userIds, n) {
+  n = { ...n, title: stripEmoji(n.title) };
   const ids = [...new Set(userIds.filter(Boolean))]; if (!ids.length) return;
   const t = now();
   for (const id of ids) {
@@ -238,6 +259,196 @@ function staffOf(sid) { // mentors à prévenir pour un élève
   return ids.length ? ids : all("SELECT id FROM users WHERE role = 'superadmin' AND active = 1").map(x => x.id);
 }
 
+// ---------- réglages ----------
+const TIMEZONE = process.env.TIMEZONE || "Africa/Lagos";
+const DEFAULTS = { rem_on: "1", rem_delay: "2", rem_every: "2", rem_hour: "18", rem_max: "6", meet_link: "" };
+const getSet = (k) => { const r = one("SELECT value FROM settings WHERE key = ?", k); return r ? r.value : DEFAULTS[k]; };
+const allSettings = () => Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, getSet(k)]));
+const localParts = (d) => Object.fromEntries(new Intl.DateTimeFormat("fr-FR", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "long" }).formatToParts(d).map(p => [p.type, p.value]));
+const fmtLocal = (d) => { const p = localParts(d); return p.hour + ":" + p.minute; };
+const fmtDayLocal = (d) => { const p = localParts(d); return p.weekday + " " + (+p.day) + "/" + p.month + " à " + p.hour + ":" + p.minute; };
+
+// ---------- rappels « remplis ton cahier » ----------
+function pendingFor(stu) {
+  const unl = all("SELECT lesson, MIN(created_at) AS at FROM unlocks WHERE student_id = ? OR (class_id IS NOT NULL AND class_id = ?) GROUP BY lesson", stu.id, stu.class_id || "");
+  return unl.map(u => { const a = one("SELECT data, submitted FROM answers WHERE student_id = ? AND lesson = ?", stu.id, u.lesson);
+    return { lesson: u.lesson, title: LESSON_TITLES[u.lesson] || "", unlocked_at: u.at, submitted: !!(a && a.submitted), pct: a ? completion(u.lesson, JSON.parse(a.data || "{}")) : 0 }; })
+    .filter(x => !x.submitted && LESSON_BY[x.lesson]).sort((a, b) => a.lesson.localeCompare(b.lesson, "fr", { numeric: true }));
+}
+function runWorkbookReminders(force) {
+  if (getSet("rem_on") !== "1" && !force) return 0;
+  const delay = +getSet("rem_delay") * 864e5, every = Math.max(1, +getSet("rem_every")) * 864e5 - 3600e3, max = +getSet("rem_max"), nowT = Date.now();
+  let sent = 0;
+  for (const stu of all("SELECT * FROM users WHERE role = 'student' AND active = 1")) {
+    const due = pendingFor(stu).filter(x => nowT - Date.parse(x.unlocked_at) >= delay).filter(x => {
+      const log = one("SELECT * FROM reminder_log WHERE student_id = ? AND lesson = ?", stu.id, x.lesson);
+      return !log || (log.count < max && nowT - Date.parse(log.last_at) >= every); });
+    if (!due.length) continue;
+    const first = (stu.full_name || stu.username).split(" ")[0];
+    if (due.length === 1) { const x = due[0]; notify([stu.id], { kind: "reminder", title: "📝 " + first + ", ton cahier t'attend", body: lessonName(x.lesson) + (x.pct ? " : rempli à " + x.pct + " %. Termine-le et envoie-le à ton mentor !" : " : pas encore commencé. Prends 15 minutes aujourd'hui !"), url: "#/lecon/" + x.lesson + "/cahier", tag: "reminder" }); }
+    else notify([stu.id], { kind: "reminder", title: "📝 " + due.length + " cahiers à terminer", body: due.map(x => x.lesson + " (" + x.pct + " %)").join(" · ") + " : courage, une question à la fois !", url: "#/", tag: "reminder" });
+    for (const x of due) run(`INSERT INTO reminder_log (student_id, lesson, count, last_at) VALUES (?,?,1,?) ON CONFLICT(student_id, lesson) DO UPDATE SET count = count + 1, last_at = excluded.last_at`, stu.id, x.lesson, now());
+    sent++;
+  }
+  return sent;
+}
+
+// ---------- agenda : cours en ligne, prière, étude biblique… ----------
+const KINDS = { cours: "Cours en ligne", priere: "Prière", bible: "Étude biblique", culte: "Culte", autre: "Rendez-vous" };
+const STEP = { daily: 864e5, weekly: 7 * 864e5, none: 0 };
+function occurrences(ev, from, to) {
+  const start = Date.parse(ev.starts_at), dur = (ev.duration || 60) * 60e3, step = STEP[ev.recur] || 0, until = ev.until ? Date.parse(ev.until) + 864e5 : Infinity, out = [];
+  if (!step) { if (start + dur >= from && start <= to) out.push(start); return out; }
+  let k = Math.max(0, Math.ceil((from - dur - start) / step));
+  for (let t = start + k * step; t <= to && t <= until && out.length < 400; t += step) out.push(t);
+  return out;
+}
+const eventTargets = (ev) => ev.class_id
+  ? [...all("SELECT id FROM users WHERE class_id = ? AND role = 'student' AND active = 1", ev.class_id).map(x => x.id), (one("SELECT mentor_id FROM classes WHERE id = ?", ev.class_id) || {}).mentor_id]
+  : all("SELECT id FROM users WHERE active = 1").map(x => x.id);
+function runEventReminders() {
+  const nowT = Date.now();
+  for (const ev of all("SELECT * FROM events")) {
+    let rem = []; try { rem = JSON.parse(ev.remind || "[]"); } catch (e) { }
+    for (const off of rem) {
+      for (const t of occurrences(ev, nowT + off * 60e3 - 3 * 60e3, nowT + off * 60e3)) {
+        if (t - off * 60e3 > nowT || t - off * 60e3 < nowT - 3 * 60e3) continue;
+        const key = ev.id + "|" + new Date(t).toISOString() + "|" + off;
+        if (one("SELECT 1 FROM event_log WHERE key = ?", key)) continue;
+        run("INSERT INTO event_log (key, sent_at) VALUES (?,?)", key, now());
+        const d = new Date(t), label = KINDS[ev.kind] || KINDS.autre;
+        const when = off >= 1440 ? "Demain à " + fmtLocal(d) : off >= 60 ? "Dans " + Math.round(off / 60) + " h (" + fmtLocal(d) + ")" : off > 0 ? "Dans " + off + " min (" + fmtLocal(d) + ")" : "C'est maintenant !";
+        notify(eventTargets(ev), { kind: "event", title: (off === 0 ? "🔴 " : "⏰ ") + ev.title, body: label + " · " + when + (ev.link ? " · Touchez pour rejoindre." : ""), url: "#/agenda", tag: "event-" + ev.id });
+      }
+    }
+  }
+  run("DELETE FROM event_log WHERE sent_at < ?", new Date(nowT - 30 * 864e5).toISOString());
+}
+let lastRemDay = "";
+setInterval(() => {
+  try { runEventReminders(); } catch (e) { console.error("Rappels agenda :", e.message); }
+  try { const p = localParts(new Date()), day = p.year + p.month + p.day; if (+p.hour === +getSet("rem_hour") && day !== lastRemDay) { lastRemDay = day; const n = runWorkbookReminders(false); if (n) console.log("Rappels cahier envoyés :", n); } } catch (e) { console.error("Rappels cahier :", e.message); }
+}, 60e3);
+
+// ---------- certificat PDF (générateur sans dépendance) ----------
+const PDF_W = JSON.parse('{"H":[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,750,556,278,222,556,333,1000,556,556,333,1000,667,333,1000,278,611,278,278,222,222,333,333,350,556,1000,333,1000,500,333,944,278,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,0,737,552,400,549,333,333,333,576,537,333,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,549,611,556,556,556,556,500,556,500],"HB":[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,750,556,278,278,556,500,1000,556,556,333,1000,667,333,1000,278,611,278,278,278,278,500,500,350,556,1000,333,1000,556,333,944,278,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,0,737,552,400,549,333,333,333,576,556,333,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,549,611,611,611,611,611,556,611,556],"TBI":[250,389,555,500,500,833,778,278,333,333,500,570,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,570,570,570,500,832,667,667,667,722,667,667,722,778,389,500,667,611,889,722,722,611,722,667,556,611,722,667,889,667,611,611,333,278,333,570,500,333,500,500,444,500,444,333,500,556,278,278,500,278,778,556,500,500,500,389,389,278,556,444,667,500,444,389,348,220,348,570,778,500,250,333,500,500,1000,500,500,333,1000,556,333,944,250,611,250,250,333,333,500,500,350,500,1000,333,1000,389,333,722,250,389,611,250,389,500,500,500,500,220,500,333,747,266,500,606,0,747,500,400,549,300,300,333,576,500,250,333,300,300,500,750,750,750,500,667,667,667,667,667,667,944,667,667,667,667,667,389,389,389,389,722,722,722,722,722,722,722,570,722,722,722,722,722,611,611,500,500,500,500,500,500,500,722,444,444,444,444,444,278,278,278,278,500,556,500,500,500,500,500,549,500,556,556,556,556,444,500,444],"TI":[250,333,420,500,500,833,778,214,333,333,500,675,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,675,675,675,500,920,611,611,667,722,611,611,722,722,333,444,667,556,833,667,722,611,722,611,500,556,722,611,833,611,556,556,389,278,389,422,500,333,500,500,444,500,444,278,500,500,278,278,444,278,722,500,500,500,500,389,389,278,500,444,667,444,444,389,400,275,400,541,778,500,250,333,500,556,889,500,500,333,1000,500,333,944,250,556,250,250,333,333,556,556,350,500,889,333,980,389,333,667,250,389,556,250,389,500,500,500,500,275,500,333,760,276,500,675,0,760,500,400,549,300,300,333,576,523,250,333,300,310,500,750,750,750,500,611,611,611,611,611,611,889,667,611,611,611,611,333,333,333,333,722,667,722,722,722,722,722,675,722,722,722,722,722,556,611,500,500,500,500,500,500,500,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,549,500,500,500,500,500,444,500,444]}');
+function winAnsi(str) {
+  const special = { "€": 0x80, "‚": 0x82, "„": 0x84, "…": 0x85, "‘": 0x91, "’": 0x92, "“": 0x93, "”": 0x94, "•": 0x95, "–": 0x96, "—": 0x97, "œ": 0x9c, "Œ": 0x8c, "Ÿ": 0x9f, " ": 0x20, " ": 0x20 };
+  const out = [];
+  for (const ch of String(str)) { const c = ch.codePointAt(0); out.push(special[ch] != null ? special[ch] : c < 256 ? c : 0x3f); }
+  return Buffer.from(out);
+}
+const pdfStr = (s) => "(" + winAnsi(s).toString("latin1").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)") + ")";
+const textW = (s, font, size, spacing = 0) => { const b = winAnsi(s); let w = 0; for (const c of b) w += (PDF_W[font][c - 32] || 500); return w * size / 1000 + spacing * b.length; };
+function certificatePdf({ name, phaseLabel, phaseTitle, lessons, mentor, date, code, verifyUrl, logo }) {
+  const W = 842, H = 595, FONTS = { H: "Helvetica", HB: "Helvetica-Bold", TBI: "Times-BoldItalic", TI: "Times-Italic" };
+  const C = { pur: "0.180 0.102 0.278", pur2: "0.357 0.227 0.549", gold: "0.788 0.635 0.153", goldd: "0.541 0.427 0.071", mut: "0.42 0.37 0.50", cream: "0.984 0.965 0.906" };
+  let s = "";
+  const txt = (t, x, y, font, size, color, opt = {}) => {
+    const sp = opt.spacing || 0, w = textW(t, font, size, sp);
+    const xx = opt.align === "center" ? x - w / 2 : opt.align === "right" ? x - w : x;
+    s += `BT /${font} ${size} Tf ${sp ? sp + " Tc " : ""}${C[color] || color} rg ${xx.toFixed(2)} ${y.toFixed(2)} Td ${pdfStr(t)} Tj ${sp ? "0 Tc " : ""}ET\n`;
+    return w;
+  };
+  const fit = (t, font, size, max) => { while (size > 10 && textW(t, font, size) > max) size -= 1; return size; };
+  const rect = (x, y, w, h, color, stroke, lw) => { s += stroke ? `${C[color]} RG ${lw || 1} w ${x} ${y} ${w} ${h} re S\n` : `${C[color]} rg ${x} ${y} ${w} ${h} re f\n`; };
+  const line = (x1, y1, x2, y2, color, lw) => { s += `${C[color]} RG ${lw} w ${x1} ${y1} m ${x2} ${y2} l S\n`; };
+  const circle = (cx, cy, r, color, fill, lw) => { const k = 0.5523 * r;
+    s += `${C[color]} ${fill ? "rg" : "RG"} ${fill ? "" : (lw || 1) + " w "}${cx + r} ${cy} m ${cx + r} ${cy + k} ${cx + k} ${cy + r} ${cx} ${cy + r} c ${cx - k} ${cy + r} ${cx - r} ${cy + k} ${cx - r} ${cy} c ${cx - r} ${cy - k} ${cx - k} ${cy - r} ${cx} ${cy - r} c ${cx + k} ${cy - r} ${cx + r} ${cy - k} ${cx + r} ${cy} c ${fill ? "f" : "S"}\n`; };
+  // fond et cadres
+  rect(0, 0, W, H, "cream");
+  rect(16, 16, W - 32, H - 32, "pur", true, 7);
+  rect(30, 30, W - 60, H - 60, "gold", true, 1.6);
+  rect(36, 36, W - 72, H - 72, "gold", true, 0.5);
+  for (const [x, y] of [[30, 30], [W - 30, 30], [30, H - 30], [W - 30, H - 30]]) { circle(x, y, 7, "gold", true); circle(x, y, 3, "pur", true); }
+  // logo
+  const lw = 132, lh = Math.round(lw * logo.h / logo.w);
+  s += `q ${lw} 0 0 ${lh} ${(W - lw) / 2} ${H - 52 - lh} cm /Logo Do Q\n`;
+  let y = H - 52 - lh - 22;
+  txt("THE DIVINE ARSENAL CORPORATION · ÉCOLE DE DISCIPLES", W / 2, y, "HB", 9, "goldd", { align: "center", spacing: 2.2 });
+  y -= 46; txt("Certificat de fin de phase", W / 2, y, "TBI", 38, "pur", { align: "center" });
+  y -= 30; txt("décerné à", W / 2, y, "H", 12.5, "mut", { align: "center" });
+  y -= 44; const ns = fit(name, "TBI", 36, 560); txt(name, W / 2, y, "TBI", ns, "pur2", { align: "center" });
+  y -= 14; line(W / 2 - 200, y, W / 2 + 200, y, "gold", 1.2);
+  y -= 28; txt("pour avoir achevé avec fidélité la", W / 2, y, "H", 13, "mut", { align: "center" });
+  y -= 26; const pt = phaseLabel + " · " + phaseTitle; txt(pt, W / 2, y, "HB", fit(pt, "HB", 19, 600), "pur", { align: "center" });
+  y -= 22; txt(lessons + " leçons étudiées, cahiers complétés et validés par son mentor", W / 2, y, "H", 11.5, "mut", { align: "center" });
+  y -= 30; txt("« Croissez dans la grâce et dans la connaissance de notre seigneur et sauveur Jésus Christ. »", W / 2, y, "TI", 12.5, "pur2", { align: "center" });
+  y -= 16; txt("2 Pierre 3.18", W / 2, y, "HB", 9.5, "goldd", { align: "center", spacing: 1 });
+  // signatures, sceau
+  const by = 92;
+  line(110, by, 300, by, "pur", 0.8); txt(mentor || "Le mentor", 205, by - 15, "HB", 11, "pur", { align: "center" }); txt("Mentor", 205, by - 28, "H", 9.5, "mut", { align: "center" });
+  line(W - 300, by, W - 110, by, "pur", 0.8); txt("Le responsable de l'école", W - 205, by - 15, "HB", 11, "pur", { align: "center" }); txt("The Divine Arsenal Corporation", W - 205, by - 28, "H", 9.5, "mut", { align: "center" });
+  circle(W / 2, by + 6, 38, "gold", true); circle(W / 2, by + 6, 33, "cream", false, 1.2); circle(W / 2, by + 6, 29, "pur", true);
+  txt(phaseLabel.toUpperCase(), W / 2, by + 9, "HB", 10, "1 1 1", { align: "center", spacing: 1 }); txt("ACHEVÉE", W / 2, by - 4, "HB", 7.5, "gold", { align: "center", spacing: 1.2 });
+  txt("Délivré le " + date + "  ·  Code de vérification : " + code, W / 2, 50, "H", 8.5, "mut", { align: "center" });
+  txt(verifyUrl, W / 2, 40, "H", 7.5, "goldd", { align: "center" });
+  // assemblage
+  const content = Buffer.from(s, "latin1");
+  const objs = [];
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objs.push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << ${Object.keys(FONTS).map((k, i) => `/${k} ${5 + i} 0 R`).join(" ")} >> /XObject << /Logo 9 0 R >> >> /Contents 4 0 R >>`);
+  objs.push([`<< /Length ${content.length} >>\nstream\n`, content, "\nendstream"]);
+  for (const k of Object.keys(FONTS)) objs.push(`<< /Type /Font /Subtype /Type1 /BaseFont /${FONTS[k]} /Encoding /WinAnsiEncoding >>`);
+  objs.push([`<< /Type /XObject /Subtype /Image /Width ${logo.w} /Height ${logo.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.data.length} >>\nstream\n`, logo.data, "\nendstream"]);
+  objs.push(`<< /Title ${pdfStr("Certificat · " + name + " · " + phaseLabel)} /Author ${pdfStr("The Divine Arsenal Corporation")} /Producer (Ecole de disciples) >>`);
+  const parts = [Buffer.from("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n", "latin1")], offs = [];
+  let len = parts[0].length;
+  objs.forEach((o, i) => { offs.push(len); const chunk = Buffer.concat([Buffer.from(`${i + 1} 0 obj\n`), ...(Array.isArray(o) ? o.map(x => Buffer.isBuffer(x) ? x : Buffer.from(x, "latin1")) : [Buffer.from(o, "latin1")]), Buffer.from("\nendobj\n")]); parts.push(chunk); len += chunk.length; });
+  const xref = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, "0") + " 00000 n \n").join("") + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${objs.length} 0 R >>\nstartxref\n${len}\n%%EOF\n`;
+  parts.push(Buffer.from(xref, "latin1"));
+  return Buffer.concat(parts);
+}
+function jpegSize(buf) { let i = 2; while (i < buf.length) { if (buf[i] !== 0xff) { i++; continue; } const m = buf[i + 1], l = buf.readUInt16BE(i + 2); if (m >= 0xc0 && m <= 0xc3) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) }; i += 2 + l; } return { w: 1, h: 1 }; }
+
+const CERT_LOGO = (() => { try { const data = fs.readFileSync(path.join(PUBLIC, "img", "cert-logo.jpg")); return { ...jpegSize(data), data }; } catch (e) { return null; } })();
+const cleanPhone = (p) => { const d = String(p || "").replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); return d.length >= 8 ? d.slice(0, 20) : null; };
+const phaseOf = (n) => +String(n).split("-")[0];
+function certStatus(sid) {
+  const val = new Set(all("SELECT lesson FROM reviews WHERE student_id = ? AND validated = 1", sid).map(r => r.lesson));
+  return PHASES.map(ph => { const ls = LESSONS.filter(l => l.ph === ph.n), done = ls.filter(l => val.has(l.n)).length, c = one("SELECT * FROM certificates WHERE student_id = ? AND phase = ?", sid, ph.n);
+    return { phase: ph.n, title: ph.t, total: ls.length, validated: done, eligible: ls.length > 0 && done === ls.length, code: c ? c.code : null, issued_at: c ? c.issued_at : null }; });
+}
+function issueCert(sid, phase) {
+  const c = one("SELECT * FROM certificates WHERE student_id = ? AND phase = ?", sid, phase); if (c) return c;
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let code;
+  do { code = Array.from(crypto.randomBytes(8), b => A[b % A.length]).join("").replace(/^(.{4})/, "$1-"); } while (one("SELECT 1 FROM certificates WHERE code = ?", code));
+  run("INSERT INTO certificates (code, student_id, phase, issued_at) VALUES (?,?,?,?)", code, sid, phase, now());
+  return one("SELECT * FROM certificates WHERE code = ?", code);
+}
+function sendCertificate(req, res, url) {
+  const me = currentUser(req); if (!me) return send(res, 401, { error: "Session expirée" });
+  const sid = url.searchParams.get("sid") || me.id, phase = +url.searchParams.get("phase");
+  if (!canSee(me, sid)) return send(res, 403, { error: "Non autorisé" });
+  const st = certStatus(sid).find(x => x.phase === phase); if (!st) return send(res, 404, { error: "Phase inconnue" });
+  if (!st.eligible) return send(res, 400, { error: "Toutes les leçons de la phase doivent être validées par le mentor (" + st.validated + "/" + st.total + ")" });
+  const stu = one("SELECT * FROM users WHERE id = ?", sid), c = issueCert(sid, phase), m = stu.mentor_id ? one("SELECT full_name FROM users WHERE id = ?", stu.mentor_id) : null;
+  const host = (req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim(), proto = isSecure(req) ? "https" : (req.headers["x-forwarded-proto"] || "http").split(",")[0];
+  const pdf = certificatePdf({ name: stu.full_name || stu.username, phaseLabel: "Phase " + phase, phaseTitle: st.title, lessons: st.total, mentor: m && m.full_name, code: c.code,
+    date: new Date(c.issued_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: TIMEZONE }), verifyUrl: proto + "://" + host + "/#/verifier/" + c.code, logo: CERT_LOGO || { w: 1, h: 1, data: Buffer.alloc(0) } });
+  const fname = "Certificat-Phase-" + phase + "-" + (stu.full_name || stu.username).normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") + ".pdf";
+  res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdf.length, "Content-Disposition": `${url.searchParams.get("dl") ? "attachment" : "inline"}; filename="${fname}"`, "Cache-Control": "no-store" });
+  res.end(pdf);
+}
+
+// ---------- activité (statistiques) ----------
+const seen = new Set();
+function trackActivity(id) { const day = new Date().toISOString().slice(0, 10), k = id + "|" + day; if (seen.has(k)) return; if (seen.size > 20000) seen.clear(); seen.add(k); run("INSERT OR IGNORE INTO activity (user_id, day) VALUES (?,?)", id, day); }
+function monthRange(m) { const [y, mo] = m.split("-").map(Number); return [new Date(Date.UTC(y, mo - 1, 1)).toISOString(), new Date(Date.UTC(y, mo, 1)).toISOString()]; }
+function statsFor(ids, month) {
+  const [a, b] = monthRange(month), set = new Set(ids), inM = (d) => d && d >= a && d < b;
+  const ph = ids.map(() => "?").join(",") || "''";
+  const act = ids.length ? all(`SELECT user_id, COUNT(*) AS days FROM activity WHERE user_id IN (${ph}) AND day >= ? AND day < ? GROUP BY user_id`, ...ids, a.slice(0, 10), b.slice(0, 10)) : [];
+  const sent = ids.length ? all(`SELECT student_id, lesson FROM answers WHERE student_id IN (${ph}) AND submitted = 1 AND submitted_at >= ? AND submitted_at < ?`, ...ids, a, b) : [];
+  const val = ids.length ? all(`SELECT student_id FROM reviews WHERE student_id IN (${ph}) AND validated = 1 AND updated_at >= ? AND updated_at < ?`, ...ids, a, b) : [];
+  const qz = ids.length ? all(`SELECT student_id, score, total FROM quiz WHERE student_id IN (${ph}) AND created_at >= ? AND created_at < ?`, ...ids, a, b) : [];
+  const msgs = ids.length ? one(`SELECT COUNT(*) AS c FROM messages WHERE author_id IN (${ph}) AND created_at >= ? AND created_at < ?`, ...ids, a, b).c : 0;
+  const posts = ids.length ? one(`SELECT COUNT(*) AS c FROM community_posts WHERE author_id IN (${ph}) AND deleted = 0 AND created_at >= ? AND created_at < ?`, ...ids, a, b).c : 0;
+  const avg = qz.length ? Math.round(100 * qz.reduce((s, q) => s + q.score / q.total, 0) / qz.length) : null;
+  return { active: act.length, active_days: act, sent: sent.length, senders: new Set(sent.map(x => x.student_id)).size, validated: val.length, tests: qz.length, test_avg: avg,
+    test_pass: qz.length ? Math.round(100 * qz.filter(q => q.score / q.total >= 0.7).length / qz.length) : null, questions: msgs, posts, qz, sentRows: sent, valRows: val };
+}
 // ---------- stockage persistant et sauvegardes ----------
 const PERSISTENT = (() => {
   if ((process.env.DATA_PERSISTENT || "").toLowerCase() === "true") return true;
@@ -261,6 +472,102 @@ const routes = [];
 const route = (method, pattern, handler) => routes.push({ method, re: new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), handler });
 
 route("GET", "/api/health", () => ({ ok: true }));
+route("GET", "/api/stats", ({ me, url }) => {
+  if (!isStaff(me)) fail(403, "Non autorisé");
+  const month = /^\d{4}-\d{2}$/.test(url.searchParams.get("month") || "") ? url.searchParams.get("month") : new Date().toISOString().slice(0, 7);
+  const classId = url.searchParams.get("class_id") || "";
+  const students = all("SELECT * FROM users WHERE role = 'student'").filter(u => staffFor(me, u.id) && (!classId || u.class_id === classId));
+  const ids = students.map(u => u.id), [a, b] = monthRange(month);
+  const cur = statsFor(ids, month);
+  const months = []; { const [y, m] = month.split("-").map(Number); for (let i = 5; i >= 0; i--) { const d = new Date(Date.UTC(y, m - 1 - i, 1)); months.push(d.toISOString().slice(0, 7)); } }
+  const trend = months.map(mo => { const s = statsFor(ids, mo); return { month: mo, active: s.active, sent: s.sent, test_avg: s.test_avg, validated: s.validated }; });
+  const classes = all("SELECT * FROM classes").filter(c => isSuper(me) || c.mentor_id === me.id);
+  const byClass = classes.map(c => { const cid = students.filter(u => u.class_id === c.id).map(u => u.id); const s = statsFor(cid, month); return { id: c.id, name: c.name, students: cid.length, active: s.active, sent: s.sent, validated: s.validated, test_avg: s.test_avg }; }).filter(x => !classId || x.id === classId);
+  const per = students.map(u => { const d = cur.active_days.find(x => x.user_id === u.id), q = cur.qz.filter(x => x.student_id === u.id);
+    return { id: u.id, name: u.full_name || u.username, class_name: (classes.find(c => c.id === u.class_id) || {}).name || "", active_days: d ? d.days : 0, sent: cur.sentRows.filter(x => x.student_id === u.id).length,
+      validated: cur.valRows.filter(x => x.student_id === u.id).length, tests: q.length, test_avg: q.length ? Math.round(100 * q.reduce((s, x) => s + x.score / x.total, 0) / q.length) : null }; });
+  return { month, students: students.filter(u => u.active).length, new_students: students.filter(u => u.created_at >= a && u.created_at < b).length,
+    active: cur.active, sent: cur.sent, senders: cur.senders, validated: cur.validated, tests: cur.tests, test_avg: cur.test_avg, test_pass: cur.test_pass, questions: cur.questions, posts: cur.posts,
+    certificates: ids.length ? one(`SELECT COUNT(*) AS c FROM certificates WHERE student_id IN (${ids.map(() => "?").join(",")}) AND issued_at >= ? AND issued_at < ?`, ...ids, a, b).c : 0,
+    trend, classes: byClass, per };
+});
+
+// ---------- certificats et WhatsApp ----------
+route("GET", "/api/certificates/:sid", ({ me, p }) => { if (!canSee(me, p.sid)) fail(403, "Non autorisé"); return certStatus(p.sid); });
+route("GET", "/api/verify/:code", ({ p }) => {
+  const c = one("SELECT c.*, u.full_name, u.username FROM certificates c LEFT JOIN users u ON u.id = c.student_id WHERE c.code = ?", String(p.code).toUpperCase());
+  if (!c) fail(404, "Aucun certificat ne correspond à ce code");
+  return { name: c.full_name || c.username, phase: c.phase, title: (PHASES.find(x => x.n === c.phase) || {}).t || "", issued_at: c.issued_at, code: c.code };
+});
+route("GET", "/api/whatsapp", ({ me, url }) => {
+  if (!isStaff(me)) fail(403, "Non autorisé");
+  const classId = url.searchParams.get("class_id") || "";
+  const students = all("SELECT * FROM users WHERE role = 'student' AND active = 1").filter(u => staffFor(me, u.id) && (!classId || u.class_id === classId));
+  const nowT = Date.now(), week = new Date(nowT - 7 * 864e5).toISOString();
+  const recent = classId ? all("SELECT lesson, created_at FROM unlocks WHERE class_id = ? AND created_at >= ? ORDER BY created_at", classId, week).map(u => ({ lesson: u.lesson, title: LESSON_TITLES[u.lesson] || "" })) : [];
+  const evs = all("SELECT * FROM events").filter(e => !e.class_id || !classId || e.class_id === classId).flatMap(e => occurrences(e, nowT, nowT + 8 * 864e5).map(t => ({ title: e.title, kind: e.kind, at: new Date(t).toISOString(), when: fmtDayLocal(new Date(t)), link: e.link }))).sort((x, y) => x.at.localeCompare(y.at)).slice(0, 6);
+  return { recent, events: evs, students: students.map(u => ({ id: u.id, name: u.full_name || u.username, phone: u.phone || "", class_id: u.class_id,
+    push: !!one("SELECT 1 FROM push_subs WHERE user_id = ?", u.id), last_seen: (one("SELECT MAX(day) AS d FROM activity WHERE user_id = ?", u.id) || {}).d || null, pending: pendingFor(u) })) };
+});
+
+
+route("GET", "/api/settings", ({ me }) => { if (!isStaff(me)) fail(403, "Non autorisé"); return { ...allSettings(), timezone: TIMEZONE }; });
+route("PUT", "/api/settings", ({ me, body }) => {
+  if (!isSuper(me)) fail(403, "Non autorisé");
+  const clean = { rem_on: body.rem_on ? "1" : "0", rem_delay: String(Math.min(30, Math.max(0, +body.rem_delay || 0))), rem_every: String(Math.min(30, Math.max(1, +body.rem_every || 1))),
+    rem_hour: String(Math.min(23, Math.max(0, Math.floor(+body.rem_hour || 0)))), rem_max: String(Math.min(30, Math.max(1, +body.rem_max || 1))), meet_link: String(body.meet_link || "").trim().slice(0, 300) };
+  for (const [k, v] of Object.entries(clean)) run("INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", k, v);
+  return { ...allSettings(), timezone: TIMEZONE };
+});
+route("POST", "/api/reminders/run", ({ me }) => { if (!isSuper(me)) fail(403, "Non autorisé"); return { sent: runWorkbookReminders(true) }; });
+route("GET", "/api/reminders/me", ({ me }) => me.role === "student" ? pendingFor(me) : []);
+route("POST", "/api/reminders/nudge", ({ me, body }) => {
+  const sid = String(body.student_id || ""); if (!staffFor(me, sid)) fail(403, "Non autorisé");
+  const stu = one("SELECT * FROM users WHERE id = ?", sid), pend = stu ? pendingFor(stu) : []; if (!pend.length) fail(400, "Rien à rappeler : tout est envoyé");
+  notify([sid], { kind: "reminder", title: "📝 Un petit mot de " + firstName(me), body: "N'oublie pas ton cahier : " + pend.map(x => x.lesson + " (" + x.pct + " %)").join(" · ") + ". Je compte sur toi !", url: pend.length === 1 ? "#/lecon/" + pend[0].lesson + "/cahier" : "#/", tag: "reminder" });
+  return { ok: true };
+});
+route("GET", "/api/reminders/class", ({ me }) => { // mentors : qui n'a pas encore envoyé son cahier
+  if (!isStaff(me)) fail(403, "Non autorisé");
+  return all("SELECT * FROM users WHERE role = 'student' AND active = 1").filter(u => staffFor(me, u.id)).map(u => ({ id: u.id, name: u.full_name || u.username, pending: pendingFor(u) })).filter(x => x.pending.length);
+});
+// agenda
+const canEditEvent = (me, classId) => isSuper(me) || (isStaff(me) && classId && mentorOfClass(me, classId));
+const pubEvent = (e) => ({ ...e, remind: JSON.parse(e.remind || "[]"), class_name: e.class_id ? ((one("SELECT name FROM classes WHERE id = ?", e.class_id) || {}).name || "Classe supprimée") : null });
+route("GET", "/api/events", ({ me, url }) => {
+  const from = Date.parse(url.searchParams.get("from") || "") || Date.now() - 3 * 3600e3, to = Math.min(Date.parse(url.searchParams.get("to") || "") || from + 31 * 864e5, from + 400 * 864e5);
+  const evs = all("SELECT * FROM events").filter(e => isSuper(me) || !e.class_id || e.class_id === me.class_id || (isStaff(me) && mentorOfClass(me, e.class_id)));
+  const occ = [];
+  for (const e of evs) for (const t of occurrences(e, from, to)) occ.push({ ...pubEvent(e), at: new Date(t).toISOString(), ends: new Date(t + e.duration * 60e3).toISOString(), can_edit: canEditEvent(me, e.class_id) });
+  return occ.sort((a, b) => a.at.localeCompare(b.at));
+});
+function eventFromBody(me, body, cur) {
+  const classId = body.class_id || null;
+  if (!canEditEvent(me, classId)) fail(403, classId ? "Vous ne pouvez programmer que pour vos classes" : "Seul le superadmin programme pour toute l'école");
+  const title = String(body.title || "").trim().slice(0, 120); if (!title) fail(400, "Titre requis");
+  const start = Date.parse(body.starts_at || ""); if (!start) fail(400, "Date et heure requises");
+  const recur = ["none", "daily", "weekly"].includes(body.recur) ? body.recur : "none";
+  const remind = (Array.isArray(body.remind) ? body.remind : [1440, 15]).map(Number).filter(x => [0, 15, 60, 1440].includes(x));
+  return { title, kind: KINDS[body.kind] ? body.kind : "autre", class_id: classId, starts_at: new Date(start).toISOString(), duration: Math.min(600, Math.max(5, +body.duration || 60)), recur,
+    until: recur !== "none" && body.until ? String(body.until).slice(0, 10) : null, link: String(body.link || "").trim().slice(0, 300), description: String(body.description || "").trim().slice(0, 1000), remind: JSON.stringify([...new Set(remind)]) };
+}
+route("POST", "/api/events", ({ me, body }) => {
+  const e = eventFromBody(me, body), id = uid();
+  run("INSERT INTO events (id, title, kind, class_id, starts_at, duration, recur, until, link, description, remind, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", id, e.title, e.kind, e.class_id, e.starts_at, e.duration, e.recur, e.until, e.link, e.description, e.remind, me.id, now());
+  const ev = one("SELECT * FROM events WHERE id = ?", id);
+  notify(eventTargets(ev).filter(x => x !== me.id), { kind: "event", title: "📅 Nouveau : " + e.title, body: (KINDS[e.kind] || "") + " · " + fmtDayLocal(new Date(e.starts_at)) + (e.recur === "weekly" ? " (chaque semaine)" : e.recur === "daily" ? " (chaque jour)" : ""), url: "#/agenda", tag: "event-" + id });
+  return pubEvent(ev);
+});
+route("PUT", "/api/events/:id", ({ me, p, body }) => {
+  const cur = one("SELECT * FROM events WHERE id = ?", p.id); if (!cur) fail(404, "Rendez-vous introuvable"); if (!canEditEvent(me, cur.class_id)) fail(403, "Non autorisé");
+  const e = eventFromBody(me, body);
+  run("UPDATE events SET title = ?, kind = ?, class_id = ?, starts_at = ?, duration = ?, recur = ?, until = ?, link = ?, description = ?, remind = ? WHERE id = ?", e.title, e.kind, e.class_id, e.starts_at, e.duration, e.recur, e.until, e.link, e.description, e.remind, p.id);
+  return pubEvent(one("SELECT * FROM events WHERE id = ?", p.id));
+});
+route("DELETE", "/api/events/:id", ({ me, p }) => {
+  const cur = one("SELECT * FROM events WHERE id = ?", p.id); if (!cur) fail(404, "Rendez-vous introuvable"); if (!canEditEvent(me, cur.class_id)) fail(403, "Non autorisé");
+  run("DELETE FROM events WHERE id = ?", p.id); return { ok: true };
+});
 route("GET", "/api/admin/status", ({ me }) => {
   if (!isSuper(me)) fail(403, "Non autorisé");
   let size = 0; try { size = fs.statSync(DB_FILE).size; } catch (e) { }
@@ -333,7 +640,7 @@ route("POST", "/api/users", ({ me, body }) => {
   if (class_id && !one("SELECT id FROM classes WHERE id = ?", class_id)) fail(400, "Classe introuvable");
   if (mentor_id && !one("SELECT id FROM users WHERE id = ? AND role IN ('admin','superadmin')", mentor_id)) fail(400, "Mentor introuvable");
   const id = uid();
-  run("INSERT INTO users (id, username, pw, full_name, role, class_id, mentor_id, active, created_at) VALUES (?,?,?,?,?,?,?,1,?)", id, username, hashPw(password), full_name, role, class_id, mentor_id, now());
+  run("INSERT INTO users (id, username, pw, full_name, role, class_id, mentor_id, active, created_at, phone) VALUES (?,?,?,?,?,?,?,1,?,?)", id, username, hashPw(password), full_name, role, class_id, mentor_id, now(), cleanPhone(body.phone));
   return pubUser(one("SELECT * FROM users WHERE id = ?", id));
 });
 route("GET", "/api/users/:id", ({ me, p }) => {
@@ -343,10 +650,10 @@ route("GET", "/api/users/:id", ({ me, p }) => {
 });
 route("PATCH", "/api/users/:id", ({ me, p, body }) => {
   const u = one("SELECT * FROM users WHERE id = ?", p.id); if (!u) fail(404, "Utilisateur introuvable");
-  const keys = Object.keys(body).filter(k => ["full_name", "role", "class_id", "mentor_id", "active"].includes(k));
+  const keys = Object.keys(body).filter(k => ["full_name", "phone", "role", "class_id", "mentor_id", "active"].includes(k));
   if (!isSuper(me)) {
-    const own = u.id === me.id && keys.every(k => k === "full_name");
-    const mentorEdit = staffFor(me, u.id) && keys.every(k => k === "full_name");
+    const own = u.id === me.id && keys.every(k => k === "full_name" || k === "phone");
+    const mentorEdit = staffFor(me, u.id) && keys.every(k => k === "full_name" || k === "phone");
     if (!own && !mentorEdit) fail(403, "Action réservée au superadmin");
   } else if (u.id === me.id && (("role" in body && body.role !== "superadmin") || ("active" in body && !body.active))) fail(400, "Vous ne pouvez pas retirer vos propres droits de superadmin");
   for (const k of keys) {
@@ -354,6 +661,7 @@ route("PATCH", "/api/users/:id", ({ me, p, body }) => {
     if (k === "full_name") v = String(v || "").trim().slice(0, 120);
     if (k === "role" && !["student", "admin", "superadmin"].includes(v)) fail(400, "Rôle invalide");
     if (k === "active") v = v ? 1 : 0;
+    if (k === "phone") v = cleanPhone(v);
     if ((k === "class_id" || k === "mentor_id") && v) { if (!one(`SELECT id FROM ${k === "class_id" ? "classes" : "users"} WHERE id = ?`, v)) fail(400, "Référence invalide"); }
     if ((k === "class_id" || k === "mentor_id") && !v) v = null;
     run(`UPDATE users SET ${k} = ? WHERE id = ?`, v, u.id);
@@ -430,6 +738,7 @@ route("PUT", "/api/reviews/:sid/:lesson", ({ me, p, body }) => {
        ON CONFLICT(student_id, lesson) DO UPDATE SET items = excluded.items, general = excluded.general, validated = excluded.validated, mentor_id = excluded.mentor_id, updated_at = excluded.updated_at`,
     p.sid, p.lesson, items, general, validated, me.id, now());
   const url = "#/lecon/" + p.lesson + "/cahier";
+  if (validated && !cur.validated) { const st = certStatus(p.sid).find(x => x.phase === phaseOf(p.lesson)); if (st && st.eligible) { issueCert(p.sid, st.phase); notify([p.sid], { kind: "certificate", title: "🎓 Ton certificat de la Phase " + st.phase + " est prêt !", body: "Félicitations ! Tu as achevé « " + st.title + " ». Télécharge ton certificat.", url: "#/", tag: "cert-" + st.phase }); notify(staffOf(p.sid).filter(x => x !== me.id), { kind: "certificate", title: "🎓 Phase " + st.phase + " achevée", body: (one("SELECT full_name FROM users WHERE id = ?", p.sid) || {}).full_name + " a validé toute la phase « " + st.title + " ».", url: "#/eleve/" + p.sid }); } }
   if (validated && !cur.validated) notify([p.sid], { kind: "validated", title: "⭐ Leçon validée !", body: firstName(me) + " a validé ta " + lessonName(p.lesson).replace(/^Leçon/, "leçon") + ". Bravo !", url, tag: "rev-" + p.lesson });
   else if (general && general !== cur.general) notify([p.sid], { kind: "review", title: "📝 Mot de ton mentor", body: lessonName(p.lesson) + " : " + general, url, tag: "rev-" + p.lesson });
   else if ("items" in body && items !== JSON.stringify(cur.items) && onceIn("rev|" + p.sid + "|" + p.lesson, 30 * 60e3)) notify([p.sid], { kind: "review", title: "✅ Ton cahier a été corrigé", body: firstName(me) + " corrige ton cahier · " + lessonName(p.lesson), url, tag: "rev-" + p.lesson });
@@ -528,7 +837,7 @@ route("POST", "/api/community/rooms/:room/posts", ({ me, p, body }) => {
   const id = Number(info.lastInsertRowid);
   { // notifications : réponse directe + activité du salon pour ceux qui y ont déjà écrit
     const where = p.room === "general" ? "Général" : p.room.startsWith("dm:") ? "Message privé" : "Leçon " + p.room, url = "#/communaute/" + p.room, who = me.full_name || me.username;
-    const preview = image && !text ? "📷 Photo" : (image ? "📷 " : "") + text;
+    const preview = image && !text ? "Photo" : (image ? "Photo · " : "") + text;
     let replied = null;
     if (p.room.startsWith("dm:")) { replied = dmPeer(me, p.room); notify([replied], { kind: "dm", title: "✉️ " + who, body: preview, url, tag: "dm-" + me.id }); }
     const tagged = mentions.map(m => m.id).filter(id => id !== replied && canRoom(one("SELECT * FROM users WHERE id = ?", id) || {}, p.room));
@@ -555,7 +864,7 @@ route("POST", "/api/community/posts/:id/react", ({ me, p, body }) => {
   if (has) run("DELETE FROM community_reactions WHERE post_id = ? AND user_id = ? AND emoji = ?", post.id, me.id, e);
   else {
     run("INSERT INTO community_reactions (post_id, user_id, emoji) VALUES (?,?,?)", post.id, me.id, e);
-    if (post.author_id !== me.id && onceIn("react|" + post.id + "|" + me.id, 60 * 60e3)) notify([post.author_id], { kind: "reaction", title: e + " " + (me.full_name || me.username) + " a réagi à ton message", body: (post.room === "general" ? "Général" : post.room.startsWith("dm:") ? "Message privé" : "Leçon " + post.room) + " : " + (post.body || "📷 Photo"), url: "#/communaute/" + post.room, tag: "react-" + post.room });
+    if (post.author_id !== me.id && onceIn("react|" + post.id + "|" + me.id, 60 * 60e3)) notify([post.author_id], { kind: "reaction", title: e + " " + (me.full_name || me.username) + " a réagi à ton message", body: (post.room === "general" ? "Général" : post.room.startsWith("dm:") ? "Message privé" : "Leçon " + post.room) + " : " + (post.body || "Photo"), url: "#/communaute/" + post.room, tag: "react-" + post.room });
   }
   run("UPDATE community_posts SET rev = ? WHERE id = ?", nextRev(), post.id);
   return pubPosts([one(`${POST_SQL} WHERE p.id = ?`, post.id)], me)[0];
@@ -667,6 +976,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (!url.pathname.startsWith("/api/")) { if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405); return res.end(); } return url.pathname.startsWith("/uploads/") ? serveUpload(req, res, url.pathname) : serveStatic(req, res, url.pathname); }
   if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") return rawAdmin(req, res, url);
+  if (url.pathname === "/api/certificate.pdf") return sendCertificate(req, res, url);
   try {
     const r = routes.find(x => x.method === req.method && x.re.test(url.pathname));
     if (!r) fail(404, "Introuvable");
@@ -675,8 +985,9 @@ const server = http.createServer(async (req, res) => {
     const token = cookies(req)[COOKIE];
     let me = null;
     if (token) { const s = one("SELECT * FROM sessions WHERE token = ? AND expires > ?", token, Date.now()); if (s) { me = one("SELECT * FROM users WHERE id = ? AND active = 1", s.user_id); } }
-    const open = ["/api/health", "/api/login", "/api/signup", "/api/logout", "/api/me"].includes(url.pathname);
+    const open = ["/api/health", "/api/login", "/api/signup", "/api/logout", "/api/me"].includes(url.pathname) || url.pathname.startsWith("/api/verify/");
     if (!open && !me) fail(401, "Session expirée. Reconnecte-toi.");
+    if (me) trackActivity(me.id);
     if (req.method !== "GET" && !open) { const o = req.headers.origin; if (o && req.headers.host && new URL(o).host !== req.headers.host) fail(403, "Origine refusée"); }
     send(res, 200, r.handler({ req, res, me, p, body, url }));
   } catch (e) {

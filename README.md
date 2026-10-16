@@ -45,6 +45,7 @@ Onglet **Environment Variables** :
 | `ALLOW_SIGNUP` | non | `true` (défaut) | `false` ferme les inscriptions par code de classe |
 | `COOKIE_SECURE` | non | `auto` (défaut) | `auto` = sécurisé dès que le site est en HTTPS |
 | `VAPID_SUBJECT` | non | ex. `mailto:vous@exemple.org` | Contact transmis aux services de notification (Google, Apple). Les clés des notifications sont créées automatiquement dans `/data/vapid.json` |
+| `TIMEZONE` | non | `Africa/Lagos` (défaut) | Fuseau horaire des rappels et des heures écrites dans les notifications |
 | `DATA_PERSISTENT` | non | `true` | À mettre seulement si le volume est branché autrement et que l'alerte s'affiche à tort |
 | `SUPERADMIN_RESET_PASSWORD` | non | `false` (défaut) | Mettez `true` **une seule fois** pour réimposer `SUPERADMIN_PASSWORD` si vous l'avez oublié, redéployez, puis remettez `false` |
 
@@ -102,6 +103,26 @@ leçons débloquées, questions et réponses mentor ↔ élève, cahier envoyé,
 réponses, mentions, messages privés et réactions dans la communauté, nouveaux messages dans les salons où l'on a déjà écrit.
 Chaque personne touche **« Activer »** (accueil, page Notifications ou Profil). Sur **iPhone**, il faut d'abord installer
 l'application sur l'écran d'accueil (iOS 16.4 ou plus récent). Le site doit être en **HTTPS**.
+
+## Rappels et agenda
+- **Rappels « remplis ton cahier »** : quand une leçon est ouverte et que le cahier n'est pas envoyé, l'élève reçoit une
+  notification (avec le % déjà rempli). Réglages dans Administration → Rappels : délai après l'ouverture, fréquence,
+  heure d'envoi, nombre maximum. Sur l'accueil, l'élève voit « À terminer » avec une barre de progression ; le mentor voit
+  « Cahiers pas encore envoyés » et peut **relancer** un élève d'un geste.
+- **Agenda** : cours en ligne, prière, étude biblique, culte… pour une classe ou toute l'école, une fois / chaque semaine /
+  chaque jour, avec le lien Google Meet. Rappels sur les téléphones : la veille, 1 h avant, 15 min avant, à l'heure.
+  Bouton « Rejoindre maintenant » quand c'est l'heure, et « Ajouter à mon agenda » (fichier .ics pour le calendrier du téléphone).
+
+## Statistiques, certificats, WhatsApp, mode sombre
+- **Statistiques mensuelles** (Tableau de bord → 📊 Statistiques) : élèves actifs, cahiers envoyés, leçons validées,
+  moyenne et taux de réussite aux tests, questions, messages, nouveaux élèves, certificats ; évolution sur 6 mois ;
+  détail par classe et par élève ; export Excel (CSV). Les mentors voient leurs élèves, le superadmin toute l'école.
+- **Certificat de fin de phase (PDF)** : dès que toutes les leçons d'une phase sont validées par le mentor, l'élève est
+  prévenu et télécharge son certificat (accueil et Profil). Chaque certificat a un **code de vérification** :
+  `https://votre-site/#/verifier/CODE` affiche « Certificat authentique » (sans connexion).
+- **Résumé WhatsApp** (Tableau de bord → 💬 Résumé WhatsApp) : message prêt pour le groupe de la classe (leçons ouvertes,
+  rendez-vous, cahiers) et messages personnels pour les élèves sans notifications (numéro WhatsApp au format +234…).
+- **Mode sombre** : Profil → Apparence (« Comme le téléphone », Clair, Sombre).
 
 ## Qui fait quoi
 - **Élève** : résumé du cours (PDF / Word), cahier en ligne avec enregistrement automatique, questions au mentor
