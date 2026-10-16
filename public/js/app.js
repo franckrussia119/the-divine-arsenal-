@@ -106,6 +106,7 @@
   applyTheme(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
   const fmt = (d) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
   const initials = (n) => (n || "?").split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase();
+  const isMyClass = (c) => S.me.role === "superadmin" || c.mentor_id === S.me.id || (S.me.role === "admin" && c.id === S.me.class_id);
   const isStaff = () => S.me && S.me.role !== "student";
   const go = (p) => { location.hash = p; };
   function confetti() {
@@ -132,7 +133,7 @@
   // débloquer / verrouiller UNE leçon : on choisit la ou les classes concernées
   async function unlockSheet(l) {
     const [classes, users] = await Promise.all([API.listClasses(), API.listUsers()]); let unlocks = await API.listUnlocks();
-    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const mine = classes.filter(isMyClass);
     const list = h("div", { class: "ulist" });
     const draw = () => fill(list, mine.length ? mine.map(c => { const on = unlocks.some(u => u.class_id === c.id && u.lesson === l.n), n = users.filter(u => u.role === "student" && u.class_id === c.id).length;
       return h("div", { class: "urow" + (on ? " on" : "") }, h("div", { style: "flex:1;min-width:0" }, h("b", null, c.name), h("small", null, n + " élève" + (n > 1 ? "s" : "") + " · " + (on ? "🔓 ouverte" : "🔒 fermée"))),
@@ -587,7 +588,7 @@
     if (!isStaff()) return go("#/");
     month = month || new Date().toISOString().slice(0, 7);
     const [st, classes, unread] = await Promise.all([API.stats(month, classId), API.listClasses(), unreadCount()]);
-    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const mine = classes.filter(isMyClass);
     const goTo = (m, c) => go("#/stats/" + m + (c ? "/" + c : ""));
     const cls = h("select", { class: "in" }, h("option", { value: "" }, "Toutes " + (S.me.role === "superadmin" ? "les classes" : "mes classes")), mine.map(c => h("option", { value: c.id }, c.name))); cls.value = classId || ""; cls.onchange = () => goTo(month, cls.value);
     const pct = (v) => v == null ? "—" : v + " %";
@@ -640,7 +641,7 @@
   async function viewWhatsApp(classId) {
     if (!isStaff()) return go("#/");
     const [classes, unread] = await Promise.all([API.listClasses(), unreadCount()]);
-    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const mine = classes.filter(isMyClass);
     if (!classId && mine.length) classId = mine[0].id;
     const d = await API.whatsapp(classId);
     const c = classes.find(x => x.id === classId);
@@ -741,12 +742,21 @@
   }
   async function eventForm(o) {
     const [classes, st] = await Promise.all([API.listClasses(), API.settings().catch(() => ({}))]);
-    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const mine = classes.filter(isMyClass);
     const pad = (n) => String(n).padStart(2, "0");
     const base = o ? new Date(o.starts_at) : (() => { const d = new Date(Date.now() + 864e5); d.setHours(19, 0, 0, 0); return d; })();
     const title = h("input", { class: "in", placeholder: "ex. Cours · Leçon 1-5, Prière du mercredi…", value: o ? o.title : "" });
     const kind = h("select", { class: "in" }, Object.entries(KINDS).map(([k, [e, t]]) => h("option", { value: k }, e + " " + t))); kind.value = o ? o.kind : "cours";
-    const cls = h("select", { class: "in" }, S.me.role === "superadmin" ? h("option", { value: "" }, "🌍 Toute l'école") : null, mine.map(c => h("option", { value: c.id }, "👥 " + c.name))); cls.value = o ? (o.class_id || "") : (S.me.role === "superadmin" ? "" : (mine[0] || {}).id || "");
+    const users = await API.listUsers().catch(() => []);
+    const cls = { value: o ? (o.class_id || "") : (S.me.role === "superadmin" ? "" : (mine[0] || {}).id || "") };
+    const whoBox = h("div", { class: "whobox" });
+    const drawWho = () => fill(whoBox, [
+      S.me.role === "superadmin" ? { id: "", t: "Toute l'école", d: "Tous les élèves et tous les mentors", icon: "globe" } : null,
+      ...mine.map(c => { const n = users.filter(u => u.role === "student" && u.class_id === c.id).length, m = users.find(u => u.id === c.mentor_id); return { id: c.id, t: c.name, d: n + " élève" + (n > 1 ? "s" : "") + (m ? " · mentor : " + (m.full_name || m.username) : ""), icon: "people" }; })
+    ].filter(Boolean).map(x => h("button", { type: "button", class: "who" + (cls.value === x.id ? " on" : ""), onclick: () => { cls.value = x.id; drawWho(); } },
+      h("span", { class: "who-i", html: V[x.icon] }), h("span", { class: "who-m" }, h("b", null, x.t), h("small", null, x.d)), h("span", { class: "who-r", html: cls.value === x.id ? V.check : "" }))));
+    drawWho();
+    const noClass = !mine.length && S.me.role !== "superadmin";
     const date = h("input", { class: "in", type: "date", value: base.getFullYear() + "-" + pad(base.getMonth() + 1) + "-" + pad(base.getDate()) });
     const time = h("input", { class: "in", type: "time", value: pad(base.getHours()) + ":" + pad(base.getMinutes()) });
     const dur = h("select", { class: "in" }, [[30, "30 min"], [45, "45 min"], [60, "1 h"], [90, "1 h 30"], [120, "2 h"], [180, "3 h"]].map(([v, t]) => h("option", { value: v }, t))); dur.value = String(o ? o.duration : 90);
@@ -759,7 +769,7 @@
     const rem = o ? o.remind : [1440, 15];
     const remBox = h("div", { class: "toggles" }, [[1440, "La veille"], [60, "1 h avant"], [15, "15 min avant"], [0, "À l'heure"]].map(([v, t]) => { const b = h("button", { type: "button", class: "tg" + (rem.includes(v) ? " on" : ""), "data-v": v }, t); b.onclick = () => b.classList.toggle("on"); return b; }));
     const err = h("div", { class: "err hide" });
-    modal(o ? "Modifier le rendez-vous" : "Nouveau rendez-vous", [h("label", { class: "f" }, "Titre"), title, h("label", { class: "f" }, "Type"), kind, h("label", { class: "f" }, "Pour qui ?"), cls,
+    modal(o ? "Modifier le rendez-vous" : "Nouveau rendez-vous", [h("label", { class: "f" }, "Titre"), title, h("label", { class: "f" }, "Type"), kind, h("label", { class: "f" }, "Pour qui ?"), noClass ? h("div", { class: "note" }, "Aucune classe ne vous est confiée. Demandez au superadmin de vous attribuer une classe (Administration → Classes).") : whoBox,
       h("div", { class: "two" }, h("div", null, h("label", { class: "f" }, "Date"), date), h("div", null, h("label", { class: "f" }, "Heure"), time)),
       h("label", { class: "f" }, "Durée"), dur, h("label", { class: "f" }, "Répétition"), recur, untilWrap,
       h("label", { class: "f" }, "Lien de la réunion (Google Meet)"), link, h("label", { class: "f" }, "Description"), desc,
@@ -768,6 +778,7 @@
         h("button", { class: "btn ghost", onclick: () => m.remove() }, "Annuler"),
         h("button", { class: "btn gold", onclick: async () => {
           try { const start = new Date(date.value + "T" + (time.value || "00:00")); if (isNaN(start)) throw new Error("Date ou heure invalide");
+            if (noClass) throw new Error("Aucune classe ne vous est confiée");
             await API.saveEvent({ id: o ? o.id : undefined, title: title.value, kind: kind.value, class_id: cls.value || null, starts_at: start.toISOString(), duration: +dur.value, recur: recur.value, until: until.value || null, link: link.value, description: desc.value, remind: [...remBox.querySelectorAll(".tg.on")].map(b => +b.dataset.v) });
             m.remove(); toast(o ? "Rendez-vous modifié ✓" : "Rendez-vous programmé ✓ Les participants sont prévenus."); route(); }
           catch (e) { err.textContent = e.message; err.classList.remove("hide"); } } }, o ? "Enregistrer" : "Programmer")]);
@@ -1141,7 +1152,7 @@
     const [students, classes, unlocks, meta, revs, quiz, msgs] = await (async () => { const s = await myStudents(); const ids = s.map(u => u.id); return [s, await API.listClasses(), await API.listUnlocks(), await API.listAnswersMeta(ids), await API.listReviews(ids), await API.listQuiz(ids), await API.listMessages(ids)]; })();
     const unread = msgs.filter(m => !m.read_by_staff).length;
     const toReview = meta.filter(m => m.submitted && !(revs.find(r => r.student_id === m.student_id && r.lesson === m.lesson) || {}).validated).length;
-    const myClasses = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const myClasses = classes.filter(isMyClass);
     let phase = +(sessionStorage.getItem("dac-ph") || 1);
     const body = h("div");
     const draw = () => {

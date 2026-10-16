@@ -146,7 +146,7 @@ const pubMsg = (m) => ({ ...m, read_by_student: !!m.read_by_student, read_by_sta
 // ---------- droits ----------
 const isSuper = (me) => me && me.role === "superadmin";
 const isStaff = (me) => me && (me.role === "admin" || me.role === "superadmin");
-function mentorOfClass(me, cid) { if (!cid) return false; if (isSuper(me)) return true; const c = one("SELECT mentor_id FROM classes WHERE id = ?", cid); return isStaff(me) && c && c.mentor_id === me.id; }
+function mentorOfClass(me, cid) { if (!cid) return false; if (isSuper(me)) return true; const c = one("SELECT mentor_id FROM classes WHERE id = ?", cid); return !!(isStaff(me) && c && (c.mentor_id === me.id || me.class_id === cid)); }
 function staffFor(me, sid) {
   if (isSuper(me)) return true; if (!isStaff(me)) return false;
   const s = one("SELECT mentor_id, class_id FROM users WHERE id = ?", sid); if (!s) return false;
@@ -641,6 +641,7 @@ route("POST", "/api/users", ({ me, body }) => {
   if (mentor_id && !one("SELECT id FROM users WHERE id = ? AND role IN ('admin','superadmin')", mentor_id)) fail(400, "Mentor introuvable");
   const id = uid();
   run("INSERT INTO users (id, username, pw, full_name, role, class_id, mentor_id, active, created_at, phone) VALUES (?,?,?,?,?,?,?,1,?,?)", id, username, hashPw(password), full_name, role, class_id, mentor_id, now(), cleanPhone(body.phone));
+  if (role === "admin" && class_id) run("UPDATE classes SET mentor_id = ? WHERE id = ? AND (mentor_id IS NULL OR mentor_id = '')", id, class_id);
   return pubUser(one("SELECT * FROM users WHERE id = ?", id));
 });
 route("GET", "/api/users/:id", ({ me, p }) => {
