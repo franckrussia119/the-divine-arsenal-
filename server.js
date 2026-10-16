@@ -22,43 +22,61 @@ const ALLOW_SIGNUP = (process.env.ALLOW_SIGNUP || "true").toLowerCase() !== "fal
 const COOKIE = "dac_session";
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
-const db = new DatabaseSync(path.join(DATA_DIR, "ecole.db"));
-db.exec(`
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, pw TEXT NOT NULL, full_name TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student','admin','superadmin')),
-  class_id TEXT, mentor_id TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS classes (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE, mentor_id TEXT, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS unlocks (id TEXT PRIMARY KEY, class_id TEXT, student_id TEXT, lesson TEXT NOT NULL, unlocked_by TEXT, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS answers (student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}',
-  submitted INTEGER NOT NULL DEFAULT 0, submitted_at TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (student_id, lesson));
-CREATE TABLE IF NOT EXISTS reviews (student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, items TEXT NOT NULL DEFAULT '{}',
-  general TEXT NOT NULL DEFAULT '', validated INTEGER NOT NULL DEFAULT 0, mentor_id TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (student_id, lesson));
-CREATE TABLE IF NOT EXISTS quiz (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL,
-  score INTEGER NOT NULL, total INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, item_key TEXT NOT NULL,
-  author_id TEXT NOT NULL, body TEXT NOT NULL, read_by_student INTEGER NOT NULL DEFAULT 0, read_by_staff INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_msg_student ON messages(student_id);
-CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz(student_id);
-CREATE INDEX IF NOT EXISTS idx_users_mentor ON users(mentor_id);
-CREATE TABLE IF NOT EXISTS community_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, author_id TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
-  image TEXT, reply_to INTEGER, fwd_author TEXT, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_cp_room ON community_posts(room, id);
-CREATE INDEX IF NOT EXISTS idx_cp_rev ON community_posts(room, rev);
-CREATE TABLE IF NOT EXISTS community_reactions (post_id INTEGER NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (post_id, user_id, emoji));
-CREATE TABLE IF NOT EXISTS community_reads (user_id TEXT NOT NULL, room TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, room));
-`);
-db.exec(`
-CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
-  url TEXT NOT NULL DEFAULT '#/', read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, id);
-CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
-`);
-if (!db.prepare("PRAGMA table_info(community_posts)").all().some(c => c.name === "mentions")) db.exec("ALTER TABLE community_posts ADD COLUMN mentions TEXT");
+const DB_FILE = path.join(DATA_DIR, "ecole.db");
+const BACKUPS = path.join(DATA_DIR, "backups");
+fs.mkdirSync(BACKUPS, { recursive: true });
+// restauration demandée depuis l'application : le fichier préparé remplace la base au démarrage
+function applyPendingRestore() {
+  const r = path.join(DATA_DIR, "restore.db"); if (!fs.existsSync(r)) return;
+  try {
+    if (fs.readFileSync(r).subarray(0, 16).toString("latin1") !== "SQLite format 3\u0000") throw new Error("fichier invalide");
+    if (fs.existsSync(DB_FILE)) fs.copyFileSync(DB_FILE, path.join(BACKUPS, "avant-restauration-" + new Date().toISOString().replace(/[:.]/g, "-") + ".db"));
+    for (const x of ["-wal", "-shm"]) { try { fs.unlinkSync(DB_FILE + x); } catch (e) { } }
+    fs.renameSync(r, DB_FILE); console.log("Sauvegarde restaurée.");
+  } catch (e) { console.error("Restauration impossible :", e.message); try { fs.unlinkSync(r); } catch (x) { } }
+}
+let db;
+function openDb() {
+  applyPendingRestore();
+  db = new DatabaseSync(DB_FILE);
+  db.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA foreign_keys = ON;
+  PRAGMA busy_timeout = 5000;
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, pw TEXT NOT NULL, full_name TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student','admin','superadmin')),
+    class_id TEXT, mentor_id TEXT, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS classes (id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE, mentor_id TEXT, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS unlocks (id TEXT PRIMARY KEY, class_id TEXT, student_id TEXT, lesson TEXT NOT NULL, unlocked_by TEXT, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS answers (student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, data TEXT NOT NULL DEFAULT '{}',
+    submitted INTEGER NOT NULL DEFAULT 0, submitted_at TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (student_id, lesson));
+  CREATE TABLE IF NOT EXISTS reviews (student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, items TEXT NOT NULL DEFAULT '{}',
+    general TEXT NOT NULL DEFAULT '', validated INTEGER NOT NULL DEFAULT 0, mentor_id TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (student_id, lesson));
+  CREATE TABLE IF NOT EXISTS quiz (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL,
+    score INTEGER NOT NULL, total INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, lesson TEXT NOT NULL, item_key TEXT NOT NULL,
+    author_id TEXT NOT NULL, body TEXT NOT NULL, read_by_student INTEGER NOT NULL DEFAULT 0, read_by_staff INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS idx_msg_student ON messages(student_id);
+  CREATE INDEX IF NOT EXISTS idx_quiz_student ON quiz(student_id);
+  CREATE INDEX IF NOT EXISTS idx_users_mentor ON users(mentor_id);
+  CREATE TABLE IF NOT EXISTS community_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, author_id TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
+    image TEXT, reply_to INTEGER, fwd_author TEXT, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS idx_cp_room ON community_posts(room, id);
+  CREATE INDEX IF NOT EXISTS idx_cp_rev ON community_posts(room, rev);
+  CREATE TABLE IF NOT EXISTS community_reactions (post_id INTEGER NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (post_id, user_id, emoji));
+  CREATE TABLE IF NOT EXISTS community_reads (user_id TEXT NOT NULL, room TEXT NOT NULL, last_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, room));
+  `);
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '#/', read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, id);
+  CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL);
+  `);
+  if (!db.prepare("PRAGMA table_info(community_posts)").all().some(c => c.name === "mentions")) db.exec("ALTER TABLE community_posts ADD COLUMN mentions TEXT");
+}
+openDb();
 const UPLOADS = path.join(DATA_DIR, "uploads");
 fs.mkdirSync(UPLOADS, { recursive: true });
 
@@ -77,7 +95,7 @@ function checkPw(pw, stored) {
 }
 
 // ---------- superadmin initial (variables d'environnement) ----------
-(function bootstrap() {
+function bootstrap() {
   const u = (process.env.SUPERADMIN_USERNAME || "").trim().toLowerCase(), p = process.env.SUPERADMIN_PASSWORD || "";
   if (!u || !p) return;
   const existing = one("SELECT * FROM users WHERE username = ?", u);
@@ -88,7 +106,8 @@ function checkPw(pw, stored) {
     run("UPDATE users SET role = 'superadmin', active = 1 WHERE id = ?", existing.id);
   }
   if ((process.env.SUPERADMIN_RESET_PASSWORD || "").toLowerCase() === "true") { run("UPDATE users SET pw = ? WHERE username = ?", hashPw(p), u); console.log("Mot de passe superadmin réinitialisé"); }
-})();
+}
+bootstrap();
 
 // ---------- aides HTTP ----------
 function send(res, code, obj, headers = {}) {
@@ -219,11 +238,35 @@ function staffOf(sid) { // mentors à prévenir pour un élève
   return ids.length ? ids : all("SELECT id FROM users WHERE role = 'superadmin' AND active = 1").map(x => x.id);
 }
 
+// ---------- stockage persistant et sauvegardes ----------
+const PERSISTENT = (() => {
+  if ((process.env.DATA_PERSISTENT || "").toLowerCase() === "true") return true;
+  try { const dir = fs.realpathSync(DATA_DIR); return fs.readFileSync("/proc/self/mountinfo", "utf8").split("\n").some(l => { const f = l.split(" "); return f[4] === dir || (f[4] && f[4] !== "/" && dir.startsWith(f[4] + "/")); }); }
+  catch (e) { return true; } // impossible de vérifier (ordinateur local) : pas d'alerte
+})();
+if (!PERSISTENT) console.warn("\n⚠️  ATTENTION : " + DATA_DIR + " n'est pas un stockage persistant.\n   Les comptes et les cahiers seront EFFACÉS au prochain déploiement.\n   Dans Coolify : Persistent Storage → Add → Volume Mount → Destination Path : " + DATA_DIR + "\n");
+function makeBackup(file) { const f = file || path.join(BACKUPS, "ecole-" + new Date().toISOString().slice(0, 10) + ".db"); try { fs.unlinkSync(f); } catch (e) { } db.exec("VACUUM INTO '" + f.replace(/'/g, "''") + "'"); return f; }
+function dailyBackup() {
+  try {
+    const today = path.join(BACKUPS, "ecole-" + new Date().toISOString().slice(0, 10) + ".db");
+    if (!fs.existsSync(today)) makeBackup(today);
+    fs.readdirSync(BACKUPS).filter(f => /^ecole-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse().slice(14).forEach(f => fs.unlinkSync(path.join(BACKUPS, f)));
+  } catch (e) { console.error("Sauvegarde automatique impossible :", e.message); }
+}
+setTimeout(dailyBackup, 60e3); setInterval(dailyBackup, 3 * 3600e3);
+const lastBackup = () => { try { const f = fs.readdirSync(BACKUPS).filter(x => x.endsWith(".db")).map(x => ({ x, t: fs.statSync(path.join(BACKUPS, x)).mtimeMs })).sort((a, b) => b.t - a.t)[0]; return f ? new Date(f.t).toISOString() : null; } catch (e) { return null; } };
+
 // ---------- routes API ----------
 const routes = [];
 const route = (method, pattern, handler) => routes.push({ method, re: new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), handler });
 
 route("GET", "/api/health", () => ({ ok: true }));
+route("GET", "/api/admin/status", ({ me }) => {
+  if (!isSuper(me)) fail(403, "Non autorisé");
+  let size = 0; try { size = fs.statSync(DB_FILE).size; } catch (e) { }
+  return { persistent: PERSISTENT, data_dir: DATA_DIR, db_size: size, users: one("SELECT COUNT(*) AS c FROM users").c, last_backup: lastBackup(),
+    backups: fs.readdirSync(BACKUPS).filter(x => /^ecole-.*\.db$/.test(x)).sort().reverse() };
+});
 
 route("GET", "/api/me", ({ me }) => pubUser(me));
 
@@ -585,10 +628,45 @@ function serveStatic(req, res, pathname) {
   fs.createReadStream(file).pipe(res);
 }
 
+// sauvegarde (téléchargement) et restauration (envoi d'un fichier .db) : superadmin uniquement
+function currentUser(req) { const token = cookies(req)[COOKIE]; if (!token) return null; const s = one("SELECT * FROM sessions WHERE token = ? AND expires > ?", token, Date.now()); return s ? one("SELECT * FROM users WHERE id = ? AND active = 1", s.user_id) : null; }
+function rawAdmin(req, res, url) {
+  const me = currentUser(req);
+  if (!isSuper(me)) return send(res, 403, { error: "Réservé au superadmin" });
+  if (url.pathname === "/api/admin/backup" && req.method === "GET") {
+    const tmp = path.join(BACKUPS, "telechargement-" + Date.now() + ".db");
+    try { makeBackup(tmp); } catch (e) { return send(res, 500, { error: "Sauvegarde impossible : " + e.message }); }
+    res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": fs.statSync(tmp).size, "Content-Disposition": `attachment; filename="ecole-de-disciples-${new Date().toISOString().slice(0, 10)}.db"`, "Cache-Control": "no-store" });
+    const st = fs.createReadStream(tmp); st.pipe(res); st.on("close", () => fs.unlink(tmp, () => { }));
+    return;
+  }
+  if (url.pathname === "/api/admin/restore" && req.method === "POST") {
+    const o = req.headers.origin; if (o && req.headers.host && new URL(o).host !== req.headers.host) return send(res, 403, { error: "Origine refusée" });
+    const tmp = path.join(DATA_DIR, "restore-upload.tmp"), out = fs.createWriteStream(tmp); let size = 0, aborted = false;
+    req.on("data", (c) => { size += c.length; if (size > 500 * 1024 * 1024 && !aborted) { aborted = true; out.destroy(); req.destroy(); fs.unlink(tmp, () => { }); } });
+    req.pipe(out);
+    out.on("finish", () => {
+      if (aborted) return;
+      try {
+        if (fs.readFileSync(tmp).subarray(0, 16).toString("latin1") !== "SQLite format 3\u0000") throw new Error("Ce fichier n'est pas une sauvegarde de l'école (.db)");
+        const test = new DatabaseSync(tmp); const ok = test.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'users'").get(); const n = ok ? test.prepare("SELECT COUNT(*) AS c FROM users").get().c : 0; test.close();
+        if (!ok) throw new Error("Sauvegarde invalide : aucune table des comptes");
+        try { makeBackup(path.join(BACKUPS, "avant-restauration-" + new Date().toISOString().replace(/[:.]/g, "-") + ".db")); } catch (e) { }
+        fs.renameSync(tmp, path.join(DATA_DIR, "restore.db"));
+        db.close(); openDb(); bootstrap();
+        send(res, 200, { ok: true, users: n });
+      } catch (e) { fs.unlink(tmp, () => { }); try { db.prepare("SELECT 1").get(); } catch (x) { openDb(); } send(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+  send(res, 404, { error: "Introuvable" });
+}
+
 // ---------- serveur ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (!url.pathname.startsWith("/api/")) { if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405); return res.end(); } return url.pathname.startsWith("/uploads/") ? serveUpload(req, res, url.pathname) : serveStatic(req, res, url.pathname); }
+  if (url.pathname === "/api/admin/backup" || url.pathname === "/api/admin/restore") return rawAdmin(req, res, url);
   try {
     const r = routes.find(x => x.method === req.method && x.re.test(url.pathname));
     if (!r) fail(404, "Introuvable");

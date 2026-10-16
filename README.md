@@ -26,7 +26,10 @@ Onglet **Persistent Storage → + Add → Volume Mount** :
 | Name | `ecole-data` (au choix) |
 | Destination Path | **`/data`** |
 
-Sans ce volume, les comptes et les cahiers seraient effacés à chaque redéploiement.
+Sans ce volume, les comptes et les cahiers sont effacés à chaque redéploiement. L'application le détecte :
+le superadmin voit alors un **cadre rouge « Attention : les données seront effacées »** sur son tableau de bord
+et dans Administration → Sauvegarde, et les journaux Coolify affichent un avertissement. Quand le volume est bien
+branché, Administration → Sauvegarde affiche **« Stockage persistant actif »**.
 
 ### 4. Variables d'environnement
 Onglet **Environment Variables** :
@@ -42,6 +45,7 @@ Onglet **Environment Variables** :
 | `ALLOW_SIGNUP` | non | `true` (défaut) | `false` ferme les inscriptions par code de classe |
 | `COOKIE_SECURE` | non | `auto` (défaut) | `auto` = sécurisé dès que le site est en HTTPS |
 | `VAPID_SUBJECT` | non | ex. `mailto:vous@exemple.org` | Contact transmis aux services de notification (Google, Apple). Les clés des notifications sont créées automatiquement dans `/data/vapid.json` |
+| `DATA_PERSISTENT` | non | `true` | À mettre seulement si le volume est branché autrement et que l'alerte s'affiche à tort |
 | `SUPERADMIN_RESET_PASSWORD` | non | `false` (défaut) | Mettez `true` **une seule fois** pour réimposer `SUPERADMIN_PASSWORD` si vous l'avez oublié, redéployez, puis remettez `false` |
 
 ### 5. Déployer
@@ -62,7 +66,7 @@ Activez **Auto Deploy** pour que chaque `git push` mette le site à jour.
 4. **Administration → Utilisateurs → Créer un utilisateur** : nom, identifiant, mot de passe, rôle
    (Élève, Mentor ou Superadmin), classe et mentor. Un récapitulatif à communiquer à la personne s'affiche.
    (Les élèves peuvent aussi créer leur compte eux-mêmes avec le code de leur classe.)
-5. **Administration → Déblocage des leçons** : choisissez une classe (ou un seul élève), puis débloquez
+5. **Administration → Déblocage** : choisissez d'abord **la classe** (chaque classe avance à son rythme), puis débloquez
    les leçons une par une ou toute une phase d'un clic. Les élèves les voient aussitôt et peuvent faire
    les exercices.
 6. Les mentors peuvent aussi débloquer les leçons de leur classe depuis leur *Tableau de bord*.
@@ -108,6 +112,10 @@ l'application sur l'écran d'accueil (iOS 16.4 ou plus récent). Le site doit ê
   classe, activation, mots de passe) et des classes.
 
 ## Sauvegardes
+- **Automatique** : une copie par jour dans `/data/backups` (14 jours gardés).
+- **Manuelle** : Administration → Sauvegarde → *Télécharger une sauvegarde* (fichier `.db` à garder sur votre ordinateur).
+- **Restaurer** : Administration → Sauvegarde → *Restaurer une sauvegarde…* (une copie des données actuelles est gardée avant).
+
 Toutes les données sont dans le volume : la base **`/data/ecole.db`** (avec `ecole.db-wal` et `ecole.db-shm`),
 les photos de la communauté dans **`/data/uploads/`** et les clés des notifications dans **`/data/vapid.json`**
 (à garder : si elles changent, chacun devra réactiver les notifications).

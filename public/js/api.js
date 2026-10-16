@@ -137,6 +137,7 @@
           async communityRead(room, last) { C(); db.creads[me.id + "|" + room] = Math.max(db.creads[me.id + "|" + room] || 0, last); save(); },
           async communityUpload(dataUrl) { return { url: dataUrl }; },
           async notifications() { return { items: [], unread: 0 }; },
+          async adminStatus() { return { persistent: true, demo: true, backups: [], users: db.users.length }; },
           async communityMembers() { return db.users.filter(u => u.id !== me.id && u.active).map(u => ({ id: u.id, name: u.full_name || u.username, username: u.username, role: u.role, class_name: (db.classes.find(c => c.id === u.class_id) || {}).name || null })); },
           async communityReactions(id) { C(); const by = {}; db.creacts.filter(r => r.post_id === id).forEach(r => { (by[r.emoji] = by[r.emoji] || []).push({ id: r.user_id, name: r.user_id === me.id ? "Moi" : nm(r.user_id) }); }); return Object.entries(by).map(([emoji, users]) => ({ emoji, users })); },
           async notifRead() { return { unread: 0 }; },
@@ -191,6 +192,9 @@
       async pushSubscribe(sub) { return call("POST", "/api/push/subscribe", sub); },
       async pushUnsubscribe(endpoint) { return call("POST", "/api/push/unsubscribe", { endpoint }); },
       async pushTest() { return call("POST", "/api/push/test"); },
+      async adminStatus() { return call("GET", "/api/admin/status"); },
+      async adminRestore(file) { let r; try { r = await fetch("/api/admin/restore", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream" }, body: file }); } catch (e) { throw new Error("Connexion impossible"); }
+        const d = await r.json().catch(() => null); if (!r.ok) throw new Error((d && d.error) || "Erreur " + r.status); return d; },
       async communityRooms() { return call("GET", "/api/community/rooms"); },
       async communityMembers() { return call("GET", "/api/community/members"); },
       async communityReactions(id) { return call("GET", "/api/community/posts/" + id + "/reactions"); },

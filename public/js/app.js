@@ -65,6 +65,26 @@
     document.body.append(m); document.body.classList.add("noscroll"); return m;
   }
 
+  // fenêtre de confirmation : renvoie true si l'on confirme
+  function ask(title, body, ok, danger) {
+    return new Promise((res) => { let done = false; const m = modal(title, body, (mm) => [h("button", { class: "btn ghost", onclick: () => { done = true; mm.remove(); res(false); } }, "Annuler"), h("button", { class: "btn " + (danger ? "bad" : "gold"), onclick: () => { done = true; mm.remove(); res(true); } }, ok)]);
+      const rm = m.remove; m.remove = () => { rm(); if (!done) { done = true; res(false); } }; });
+  }
+  // débloquer / verrouiller UNE leçon : on choisit la ou les classes concernées
+  async function unlockSheet(l) {
+    const [classes, users] = await Promise.all([API.listClasses(), API.listUsers()]); let unlocks = await API.listUnlocks();
+    const mine = classes.filter(c => S.me.role === "superadmin" || c.mentor_id === S.me.id);
+    const list = h("div", { class: "ulist" });
+    const draw = () => fill(list, mine.length ? mine.map(c => { const on = unlocks.some(u => u.class_id === c.id && u.lesson === l.n), n = users.filter(u => u.role === "student" && u.class_id === c.id).length;
+      return h("div", { class: "urow" + (on ? " on" : "") }, h("div", { style: "flex:1;min-width:0" }, h("b", null, c.name), h("small", null, n + " élève" + (n > 1 ? "s" : "") + " · " + (on ? "🔓 ouverte" : "🔒 fermée"))),
+        h("button", { class: "btn sm " + (on ? "ghost" : "gold"), onclick: async () => {
+          if (!await ask((on ? "Verrouiller" : "Débloquer") + " pour « " + c.name + " » ?", h("p", null, "Leçon " + l.n + " · ", h("b", null, l.t), h("br"), (on ? "Fermer" : "Ouvrir") + " cette leçon pour la classe ", h("b", null, c.name), " (" + n + " élève" + (n > 1 ? "s" : "") + ")."), on ? "🔒 Verrouiller" : "🔓 Débloquer", on)) return;
+          await API.setUnlock({ class_id: c.id }, l.n, !on); toast((on ? "Verrouillée pour " : "Débloquée pour ") + c.name); unlocks = await API.listUnlocks(); draw(); } }, on ? "Verrouiller" : "Débloquer")); })
+      : h("div", { class: "note" }, S.me.role === "superadmin" ? "Aucune classe. Créez-en une dans Administration → Classes." : "Aucune classe ne vous est confiée."));
+    draw();
+    modal("Leçon " + l.n + " · pour quelle classe ?", h("div", null, h("p", { class: "muted", style: "margin-top:0" }, "Chaque classe avance à son rythme. Choisissez la classe à qui ouvrir (ou fermer) « " + l.t + " »."), list), (m) => [h("button", { class: "btn", onclick: () => m.remove() }, "Terminé")]);
+  }
+
   // ---------- données : déblocages et progression ----------
   const unlockedFor = (u, unlocks) => new Set(unlocks.filter(x => x.student_id === u.id || (x.class_id && x.class_id === u.class_id)).map(x => x.lesson));
   function lessonStatus(n, unl, meta, rev, quiz) {
@@ -254,7 +274,8 @@
     const head = h("div", { class: "lhead p" + l.ph }, h("div", { class: "wrap" },
       h("a", { class: "back desk", href: backHref }, "← " + (review ? (student.full_name || student.username) : preview ? "Toutes les leçons" : "Mon parcours")),
       h("div", { class: "k" }, "LEÇON " + l.n + " · " + l.etape.toUpperCase()), h("h1", null, l.t), h("div", { class: "fil" }, l.fil),
-      h("a", { class: "discuss", href: "#/communaute/" + l.n }, ic("people"), "Discussion de la leçon", h("span", { class: "dc", "data-room": l.n }))));
+      h("div", { class: "row", style: "gap:8px" }, h("a", { class: "discuss", href: "#/communaute/" + l.n }, ic("people"), "Discussion de la leçon", h("span", { class: "dc", "data-room": l.n })),
+        preview ? h("button", { class: "discuss gold", onclick: () => unlockSheet(l) }, "🔓 Débloquer pour une classe…") : null)));
     const short = { support: "Résumé", cahier: review ? "Cahier" : "Cahier", test: "Test", questions: "Questions" };
     const tabsBar = h("div", { class: "ltabs" }, h("div", { class: "wrap" }, tabs.map(([k, t]) => h("a", { href: base + "/" + k, class: tab === k ? "on" : null, onclick: (e) => { e.preventDefault(); location.replace(base + "/" + k); } }, h("span", { class: "lt-long" }, t), h("span", { class: "lt-short" }, short[k]), (k === "questions" || (review && k === "cahier")) && unreadL ? h("span", { class: "c" }, unreadL) : null))));
     const body = h("div", { class: "wrap page lpage" });
@@ -839,11 +860,11 @@
     const unread = await unreadCount();
     shell("#/lecons", unread, h("div", { class: "wrap page" },
       h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, "LES 36 LEÇONS"), h("h1", null, "Toutes les leçons"), h("p", null, "Ouvrez n'importe quelle leçon pour voir le résumé du cours, le cahier d'exercices et le test, tels que les élèves les verront."),
-        S.me.role === "superadmin" ? h("a", { class: "btn gold", style: "margin-top:14px", href: "#/admin/deblocage" }, "🔓 Débloquer des leçons pour une classe") : null)),
+        S.me.role === "superadmin" ? h("a", { class: "btn gold", style: "margin-top:14px", href: "#/admin/deblocage" }, "🔓 Débloquer des leçons (par classe)") : null)),
       PHASES.map(p => { const ls = LESSONS.filter(l => l.ph === p.n);
         return h("section", { class: "phase" }, h("h2", null, "Phase " + p.n + " · " + p.t, h("small", null, ls.length + " leçons")),
           h("div", { class: "grid" }, ls.map(l => h("a", { class: "lcard p" + l.ph, href: "#/lecon/" + l.n }, h("div", { class: "n" }, "LEÇON " + l.n), h("h3", null, l.t), h("div", { class: "hk" }, l.hook),
-            h("div", { class: "foot" }, h("span", { class: "chip w" }, l.wb.q.length + " questions"), h("span", { class: "chip" }, "Test " + l.quiz.length + " q.")), h("div", { class: "wm" }, l.n))))); })));
+            h("div", { class: "foot" }, h("span", { class: "chip w" }, l.wb.q.length + " questions"), h("span", { class: "chip" }, "Test " + l.quiz.length + " q."), h("button", { class: "chip g ubtn", onclick: (e) => { e.preventDefault(); e.stopPropagation(); unlockSheet(l); } }, "🔓 Débloquer…")), h("div", { class: "wm" }, l.n))))); })));
   }
 
   // =============================== MENTOR ===============================
@@ -862,8 +883,8 @@
         h("div", { class: "legend" }, [["#EEEAF3", "Verrouillée"], ["#fff", "Ouverte"], ["var(--lil2)", "En cours"], ["var(--gold)", "Envoyée : à corriger"], ["#3BB273", "Validée"]].map(([c, t]) => h("span", null, h("i", { style: "background:" + c + ";box-shadow:inset 0 0 0 1px #ddd" }), t))),
         Object.keys(byClass).length ? Object.entries(byClass).map(([cid, ss]) => { const c = classes.find(x => x.id === cid);
           return h("div", { class: "card", style: "margin:16px 0" }, h("div", { class: "row" }, h("h2", { style: "margin:0" }, c ? c.name : "Sans classe"), c ? h("span", { class: "chip c" }, "Code : " + c.code) : null, h("span", { class: "muted" }, ss.length + " élève" + (ss.length > 1 ? "s" : ""))),
-            c && myClasses.includes(c) ? h("div", { style: "margin:14px 0" }, h("div", { class: "muted", style: "font-size:13px;margin-bottom:6px;font-weight:600" }, "Débloquer pour toute la classe (cliquez une leçon) :"),
-              h("div", { class: "toggles" }, ls.map(l => { const on = unlocks.some(u => u.class_id === c.id && u.lesson === l.n); return h("button", { class: "tg" + (on ? " on" : ""), title: l.t, onclick: async () => { await API.setUnlock({ class_id: c.id }, l.n, !on); toast(on ? "Leçon " + l.n + " verrouillée" : "Leçon " + l.n + " débloquée pour la classe 🔓"); route(); } }, (on ? "🔓 " : "🔒 ") + l.n); }))) : null,
+            c && myClasses.includes(c) ? h("div", { style: "margin:14px 0" }, h("div", { class: "muted", style: "font-size:13px;margin-bottom:6px;font-weight:600" }, "Leçons de la classe « " + c.name + " » (touchez pour ouvrir ou fermer) :"),
+              h("div", { class: "toggles" }, ls.map(l => { const on = unlocks.some(u => u.class_id === c.id && u.lesson === l.n); return h("button", { class: "tg" + (on ? " on" : ""), title: l.t, onclick: async () => { const n = ss.length; if (!await ask((on ? "Verrouiller" : "Débloquer") + " la leçon " + l.n + " ?", h("p", null, h("b", null, l.t), h("br"), "Pour la classe ", h("b", null, c.name), " (" + n + " élève" + (n > 1 ? "s" : "") + ")."), on ? "🔒 Verrouiller" : "🔓 Débloquer", on)) return; await API.setUnlock({ class_id: c.id }, l.n, !on); toast(on ? "Leçon " + l.n + " verrouillée" : "Leçon " + l.n + " débloquée pour la classe 🔓"); route(); } }, (on ? "🔓 " : "🔒 ") + l.n); }))) : null,
             h("div", { class: "scroll" }, h("table", { class: "mat" }, h("tr", null, h("th", null, "Élève"), ls.map(l => h("th", { title: l.t }, l.n))),
               ss.map(s => { const unl = unlockedFor(s, unlocks); return h("tr", null, h("td", { class: "nm" }, h("a", { href: "#/eleve/" + s.id }, s.full_name || s.username)), ls.map(l => { const m = meta.find(x => x.student_id === s.id && x.lesson === l.n), r = revs.find(x => x.student_id === s.id && x.lesson === l.n), q = bestQuiz(quiz, s.id, l.n);
                 const stt = lessonStatus(l.n, unl, m, r, q); const lab = stt === "vd" ? "✓" : stt === "sb" ? "!" : q ? q.score + "" : "";
@@ -873,7 +894,8 @@
             : "Aucun élève ne vous est encore attribué. Le superadmin vous les attribue depuis « Administration »."));
     };
     draw();
-    shell("#/mentor", unread, h("div", { class: "wrap page" }, installCard(), pushCard(),
+    let storage = null; if (S.me.role === "superadmin") { try { const st = await API.adminStatus(); if (!st.persistent) storage = storageCard(st); } catch (e) { } }
+    shell("#/mentor", unread, h("div", { class: "wrap page" }, storage, installCard(), pushCard(),
       h("div", { class: "welcome" }, h("div", null, h("div", { class: "k" }, S.me.role === "superadmin" ? "SUPERADMIN" : "MENTOR"), h("h1", null, "Bonjour, " + (S.me.full_name || S.me.username)), h("p", null, "Suivez vos élèves, corrigez leurs cahiers et répondez à leurs questions."))),
       h("div", { class: "stats" }, h("div", { class: "stat" }, h("b", null, students.length), h("span", null, "Élèves")), h("div", { class: "stat" }, h("b", null, toReview), h("span", null, "Cahiers à corriger")), h("div", { class: "stat" }, h("b", null, unread), h("span", null, "Questions non lues")), h("div", { class: "stat" }, h("b", null, revs.filter(r => r.validated).length), h("span", null, "Leçons validées"))),
       body));
@@ -937,13 +959,20 @@
     name.focus();
   }
 
+  function storageCard(st) {
+    if (!st || st.persistent) return h("div", { class: "card storage ok" }, h("div", { class: "pic on" }, "✓"), h("div", null, h("b", null, "Stockage persistant actif"), h("div", { class: "muted", style: "font-size:14px" }, "Les données sont gardées dans le volume " + ((st && st.data_dir) || "/data") + " et survivent aux redéploiements.")));
+    return h("div", { class: "card storage bad" }, h("h3", null, "⚠️ Attention : les données seront effacées au prochain déploiement"),
+      h("p", null, "Le dossier ", h("b", null, st.data_dir), " n'est pas relié à un stockage persistant dans Coolify. À chaque mise à jour, la base repart de zéro."),
+      h("ol", null, h("li", null, "Dans Coolify, ouvrez votre application → onglet ", h("b", null, "Persistent Storage"), " (ou « Storages »)."), h("li", null, h("b", null, "+ Add → Volume Mount"), " : Name ", h("code", null, "ecole-data"), ", Destination Path ", h("code", null, st.data_dir), "."), h("li", null, "Avant de redéployer, ", h("b", null, "téléchargez une sauvegarde"), " ci-dessous (onglet Sauvegarde), puis redéployez et restaurez-la.")),
+      h("a", { class: "btn gold sm", href: "/api/admin/backup", download: true }, ic("dl"), "Télécharger une sauvegarde maintenant"));
+  }
   async function viewAdmin(tab) {
     if (S.me.role !== "superadmin") return go("#/mentor");
     tab = tab || "users";
     const [users, classes, unread] = await Promise.all([API.listUsers(), API.listClasses(), unreadCount()]);
     const mentors = users.filter(u => u.role !== "student");
     const body = h("div");
-    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Utilisateurs"], ["deblocage", "Déblocage"], ["classes", "Classes"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
+    const tabs = h("div", { class: "tabs", style: "max-width:680px" }, [["users", "Comptes"], ["deblocage", "Déblocage"], ["classes", "Classes"], ["sauvegarde", "Sauvegarde"]].map(([k, t]) => h("button", { class: tab === k ? "on" : null, onclick: () => go("#/admin/" + k) }, t)));
     if (tab === "users") {
       let q = "", rf = "all";
       const search = h("input", { class: "in", placeholder: "Rechercher un nom ou un identifiant…", style: "max-width:320px" });
@@ -965,40 +994,69 @@
       draw();
       body.append(h("div", { class: "card", style: "margin-top:16px" }, h("div", { class: "row toolbar", style: "margin-bottom:14px" }, h("button", { class: "btn gold", onclick: () => createUserModal(classes, mentors) }, "+ Créer un utilisateur"), search, roleF, h("span", { class: "spacer" }), h("span", { class: "muted", style: "font-size:13px" }, users.filter(u => u.role === "student").length + " élèves · " + mentors.length + " mentors / admins")),
         h("div", { class: "note", style: "margin-bottom:12px" }, "Créez vous-même les comptes (bouton « Créer un utilisateur ») et communiquez à chacun son identifiant et son mot de passe. Les élèves peuvent aussi créer leur compte avec le code de leur classe. Changez ici le rôle, le mentor et la classe de chacun."), tbl));
+    } else if (tab === "sauvegarde") {
+      const st = await API.adminStatus();
+      const file = h("input", { type: "file", accept: ".db,application/octet-stream", class: "hide" });
+      file.onchange = async () => { const f = file.files[0]; file.value = ""; if (!f) return;
+        if (!await ask("Restaurer cette sauvegarde ?", h("p", null, "Fichier : ", h("b", null, f.name), " (" + Math.round(f.size / 1024) + " Ko).", h("br"), "Toutes les données actuelles seront remplacées par celles de la sauvegarde. Une copie de sécurité des données actuelles est gardée sur le serveur."), "Restaurer", true)) return;
+        try { toast("Restauration en cours…"); const r = await API.adminRestore(f); toast("Sauvegarde restaurée ✓ (" + r.users + " comptes)"); setTimeout(() => location.reload(), 1500); } catch (e) { toast(e.message); } };
+      body.append(storageCard(st),
+        h("div", { class: "card", style: "margin-top:16px" }, h("h3", null, "💾 Sauvegardes"),
+          h("p", { class: "muted" }, "Le serveur fait une sauvegarde automatique chaque jour (les 14 derniers jours sont gardés dans le stockage de l'école). Téléchargez aussi régulièrement une copie sur votre ordinateur ou votre téléphone : c'est la meilleure protection."),
+          h("p", null, "Dernière sauvegarde automatique : ", h("b", null, st.last_backup ? fmt(st.last_backup) : "pas encore (la première se fait une minute après le démarrage)")),
+          h("div", { class: "row" }, API.mode === "server" ? h("a", { class: "btn gold", href: "/api/admin/backup", download: true }, ic("dl"), "Télécharger une sauvegarde") : h("span", { class: "muted" }, "Indisponible en mode démonstration"),
+            API.mode === "server" ? h("button", { class: "btn ghost", onclick: () => file.click() }, "Restaurer une sauvegarde…") : null), file,
+          h("p", { class: "muted", style: "font-size:13px;margin-top:12px" }, "La sauvegarde contient les comptes, classes, déblocages, cahiers, corrections, tests, questions, messages et notifications. Les photos de la communauté restent dans le dossier /data/uploads du serveur.")));
     } else if (tab === "deblocage") {
       const unlocks = await API.listUnlocks();
       const students = users.filter(u => u.role === "student");
-      const target = h("select", { class: "in", style: "max-width:420px" },
-        h("optgroup", { label: "Toute une classe" }, classes.map(c => h("option", { value: "c:" + c.id }, "Classe · " + c.name))),
-        h("optgroup", { label: "Un seul élève" }, students.map(u => h("option", { value: "s:" + u.id }, (u.full_name || u.username) + " (@" + u.username + ")"))));
-      try { const saved = sessionStorage.getItem("dac-target"); if (saved && [...target.options].some(o => o.value === saved)) target.value = saved; } catch (e) { }
-      let phase = 1;
+      let target = null, phase = 1; // rien n'est présélectionné : on choisit toujours la classe
       const zone = h("div");
+      const tName = (t) => t.startsWith("c:") ? "la classe « " + (classes.find(c => c.id === t.slice(2)) || {}).name + " »" : "l'élève " + ((students.find(u => u.id === t.slice(2)) || {}).full_name || "");
+      const tCount = (t) => t.startsWith("c:") ? students.filter(u => u.class_id === t.slice(2)).length : 1;
       const isOn = (t, n) => t.startsWith("c:") ? unlocks.some(u => u.class_id === t.slice(2) && u.lesson === n) : unlocks.some(u => u.student_id === t.slice(2) && u.lesson === n);
       const viaClass = (t, n) => { if (!t.startsWith("s:")) return false; const st = students.find(u => u.id === t.slice(2)); return st && st.class_id && unlocks.some(u => u.class_id === st.class_id && u.lesson === n); };
       const setOn = async (t, n, on) => { const tg = t.startsWith("c:") ? { class_id: t.slice(2) } : { student_id: t.slice(2) }; await API.setUnlock(tg, n, on);
         for (let i = unlocks.length - 1; i >= 0; i--) { const u = unlocks[i]; if (u.lesson === n && (tg.class_id ? u.class_id === tg.class_id : u.student_id === tg.student_id)) unlocks.splice(i, 1); }
         if (on) unlocks.push({ class_id: tg.class_id || null, student_id: tg.student_id || null, lesson: n }); };
       const draw = () => {
-        const t = target.value;
-        if (!t) { fill(zone, h("div", { class: "empty" }, "Créez d'abord une classe (onglet Classes) ou un élève (onglet Utilisateurs).")); return; }
-        const ls = LESSONS.filter(l => l.ph === phase);
-        fill(zone, h("div", { class: "tabs", style: "max-width:520px;margin-top:16px" }, PHASES.map(p => h("button", { class: phase === p.n ? "on" : null, onclick: () => { phase = p.n; draw(); } }, "Phase " + p.n))),
-          h("div", { class: "row", style: "margin:14px 0" },
-            h("button", { class: "btn sm", onclick: async (e) => { e.target.disabled = true; for (const l of ls) if (!isOn(t, l.n)) await setOn(t, l.n, true); toast("Phase " + phase + " débloquée 🔓"); draw(); } }, "🔓 Tout débloquer (phase " + phase + ")"),
-            h("button", { class: "btn ghost sm", onclick: async (e) => { e.target.disabled = true; for (const l of ls) if (isOn(t, l.n)) await setOn(t, l.n, false); toast("Phase " + phase + " verrouillée"); draw(); } }, "🔒 Tout verrouiller")),
-          h("div", { class: "grid" }, ls.map(l => { const on = isOn(t, l.n), vc = viaClass(t, l.n);
+        if (!classes.length && !students.length) return fill(zone, h("div", { class: "empty" }, "Créez d'abord une classe (onglet Classes) et ses élèves (onglet Utilisateurs)."));
+        if (!target) {
+          const stuSel = h("select", { class: "in" }, h("option", { value: "" }, "— choisir un élève —"), students.map(u => h("option", { value: u.id }, (u.full_name || u.username) + ((classes.find(c => c.id === u.class_id) || {}).name ? " · " + classes.find(c => c.id === u.class_id).name : ""))));
+          stuSel.onchange = () => { if (stuSel.value) { target = "s:" + stuSel.value; draw(); } };
+          return fill(zone, h("h3", { class: "step" }, h("span", null, "1"), "Pour quelle classe ?"),
+            h("p", { class: "muted", style: "margin-top:0;font-size:14px" }, "Chaque classe avance à son rythme : choisissez la classe dont vous voulez ouvrir ou fermer des leçons."),
+            classes.length ? h("div", { class: "ccards" }, classes.map(c => { const n = students.filter(u => u.class_id === c.id).length, open = LESSONS.filter(l => unlocks.some(u => u.class_id === c.id && u.lesson === l.n)), m = users.find(u => u.id === c.mentor_id);
+              return h("button", { class: "ccard", onclick: () => { target = "c:" + c.id; phase = open.length ? L[open[open.length - 1].n].ph : 1; draw(); } },
+                h("b", null, c.name), h("span", null, n + " élève" + (n > 1 ? "s" : "") + " · mentor : " + (m ? m.full_name || m.username : "aucun")),
+                h("div", { class: "cprog" }, h("i", { style: "width:" + Math.round(100 * open.length / LESSONS.length) + "%" })),
+                h("small", null, open.length ? open.length + " / " + LESSONS.length + " leçons ouvertes · dernière : " + open[open.length - 1].n : "Aucune leçon ouverte"), h("em", null, "Choisir →")); }))
+              : h("div", { class: "note" }, "Aucune classe : créez-en une dans l'onglet Classes."),
+            students.length ? h("details", { class: "onestu" }, h("summary", null, "Ou bien ouvrir une leçon pour un seul élève (rattrapage, cas particulier)"), stuSel) : null);
+        }
+        const ls = LESSONS.filter(l => l.ph === phase), who = tName(target), cnt = tCount(target);
+        const bulk = async (on) => {
+          const todo = ls.filter(l => isOn(target, l.n) !== on); if (!todo.length) return toast(on ? "Ces leçons sont déjà ouvertes" : "Ces leçons sont déjà fermées");
+          if (!await ask(on ? "Tout débloquer ?" : "Tout verrouiller ?", h("p", null, (on ? "Ouvrir " : "Fermer ") + todo.length + " leçon" + (todo.length > 1 ? "s" : "") + " de la phase " + phase + " pour ", h("b", null, who), target.startsWith("c:") ? " (" + cnt + " élève" + (cnt > 1 ? "s" : "") + ")." : "."), on ? "🔓 Oui, débloquer" : "🔒 Oui, verrouiller", !on)) return;
+          for (const l of todo) await setOn(target, l.n, on); toast((on ? "Débloqué pour " : "Verrouillé pour ") + who); draw(); };
+        fill(zone,
+          h("div", { class: "tsel" }, h("div", { class: "tsel-i" }, target.startsWith("c:") ? "👥" : "👤"), h("div", { style: "flex:1;min-width:0" }, h("small", null, target.startsWith("c:") ? "CLASSE SÉLECTIONNÉE" : "ÉLÈVE SÉLECTIONNÉ"), h("b", null, target.startsWith("c:") ? (classes.find(c => c.id === target.slice(2)) || {}).name : (students.find(u => u.id === target.slice(2)) || {}).full_name), target.startsWith("c:") ? h("span", null, cnt + " élève" + (cnt > 1 ? "s" : "")) : null),
+            h("button", { class: "btn ghost sm", onclick: () => { target = null; draw(); } }, "Changer")),
+          h("h3", { class: "step" }, h("span", null, "2"), "Leçons à ouvrir ou fermer"),
+          h("div", { class: "tabs", style: "max-width:520px" }, PHASES.map(p => h("button", { class: phase === p.n ? "on" : null, onclick: () => { phase = p.n; draw(); } }, "Phase " + p.n))),
+          h("div", { class: "row", style: "margin:14px 0" }, h("button", { class: "btn sm", onclick: () => bulk(true) }, "🔓 Tout débloquer (phase " + phase + ")"), h("button", { class: "btn ghost sm", onclick: () => bulk(false) }, "🔒 Tout verrouiller")),
+          h("div", { class: "grid" }, ls.map(l => { const on = isOn(target, l.n), vc = viaClass(target, l.n);
             return h("div", { class: "card", style: "padding:16px;border:3px solid " + (on || vc ? "var(--gold)" : "transparent") },
               h("div", { class: "row" }, h("b", { style: "color:var(--goldd)" }, "LEÇON " + l.n), h("span", { class: "spacer" }), on || vc ? h("span", { class: "chip g" }, "🔓 Ouverte") : h("span", { class: "chip l" }, "🔒 Fermée")),
               h("h3", { style: "margin:8px 0" }, l.t),
               vc ? h("div", { class: "muted", style: "font-size:13px" }, "Déjà ouverte pour toute sa classe.") :
-                h("button", { class: "btn sm " + (on ? "ghost" : "gold"), onclick: async () => { await setOn(t, l.n, !on); toast(on ? "Leçon " + l.n + " verrouillée" : "Leçon " + l.n + " débloquée 🔓"); draw(); } }, on ? "Verrouiller" : "Débloquer"),
+                h("button", { class: "btn sm " + (on ? "ghost" : "gold"), onclick: async () => {
+                  if (!await ask(on ? "Verrouiller la leçon " + l.n + " ?" : "Débloquer la leçon " + l.n + " ?", h("p", null, h("b", null, l.t), h("br"), on ? "Elle ne sera plus accessible pour " : "Elle sera ouverte pour ", h("b", null, who), target.startsWith("c:") ? " (" + cnt + " élève" + (cnt > 1 ? "s" : "") + ")" : "", on ? "." : ". Les élèves recevront une notification."), on ? "🔒 Verrouiller" : "🔓 Débloquer", on)) return;
+                  await setOn(target, l.n, !on); toast((on ? "Leçon " + l.n + " verrouillée pour " : "Leçon " + l.n + " débloquée pour ") + who); draw(); } }, on ? "Verrouiller" : "Débloquer"),
               h("a", { href: "#/lecon/" + l.n, style: "display:block;margin-top:8px;font-size:13px" }, "Voir la leçon →")); })));
       };
-      target.onchange = () => { try { sessionStorage.setItem("dac-target", target.value); } catch (e) { } draw(); };
       draw();
-      body.append(h("div", { class: "card", style: "margin-top:16px" }, h("label", { class: "f", style: "margin-top:0" }, "Pour qui voulez-vous débloquer des leçons ?"), target,
-        h("p", { class: "muted", style: "font-size:13px;margin:8px 0 0" }, "Une leçon débloquée apparaît aussitôt dans le parcours des élèves concernés : ils peuvent lire le résumé, remplir le cahier et passer le test."), zone));
+      body.append(h("div", { class: "card", style: "margin-top:16px" }, zone));
     } else {
       const list = h("div");
       const edit = (c) => { const n = h("input", { class: "in", value: c ? c.name : "" }), code = h("input", { class: "in", style: "text-transform:uppercase", value: c ? c.code : Math.random().toString(36).slice(2, 8).toUpperCase() });

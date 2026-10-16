@@ -11,7 +11,6 @@ ENV NODE_ENV=production \
     DATA_DIR=/data
 
 RUN mkdir -p /data
-VOLUME ["/data"]
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
